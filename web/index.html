@@ -234,7 +234,7 @@
             <div class="field"><label>Accuracy</label><select id="trModel"><option value="auto">Auto (recommended)</option><option value="base">Fast (base)</option><option value="small">Balanced (small)</option><option value="medium">Accurate (medium)</option><option value="large-v3-turbo">Best (large v3 turbo, GPU)</option></select></div>
             <div class="divider"></div>
             <label class="switch"><input type="checkbox" id="trBurn" /><span class="track"></span><span><b>Also make a captioned video</b><small>Burns the captions into a copy of the full video</small></span></label>
-            <div class="field" id="trStyleField" hidden><label>Caption style</label><div class="seg" data-name="tr_style"><button type="button" data-value="bold" class="on"><span class="cap-bold">BOLD <em>WORD</em></span></button><button type="button" data-value="clean">Subtitle</button></div></div>
+            <div class="field" id="trStyleField" hidden><label>Caption style</label><div class="seg" data-name="tr_style"><button type="button" data-value="bold" class="on"><span class="cap-bold">BOLD <em>WORD</em></span></button><button type="button" data-value="pop"><span class="cap-pop">POP <em>100%</em></span></button><button type="button" data-value="clean">Subtitle</button></div></div>
             <button class="btn primary lg tool-start" disabled>Transcribe</button>
           </div>
         </div>
@@ -323,10 +323,13 @@
           <div class="card-head" style="margin-top:22px"><h3>Your own video file</h3></div>
           <div class="kv-list">
             <div><span>Music</span><b>Finds every part with background music, second by second</b></div>
-            <div><span>Tags</span><b>Artist / album tags left in the file</b></div>
-            <div><span>Privacy</span><b>Runs on this computer, nothing leaves it</b></div>
+            <div><span>Songs</span><b>Names each song (Shazam), after removing the voices</b></div>
+            <div><span>Watermarks</span><b>TikTok / Instagram marks, @creator tags, fixed logos</b></div>
+            <div><span>Broadcasts</span><b>TV, sports and studio logos, live scoreboards, movie framing</b></div>
+            <div><span>Web search</span><b>Optional: finds your frames online (Google Cloud Vision key)</b></div>
+            <div><span>Fix</span><b>One click: remove the music, keep the voice</b></div>
           </div>
-          <p class="hint" style="margin:14px 0 0;line-height:1.5">YouTube's Content ID database isn't public, so no tool can guarantee a video is free of copyrighted material. This report shows the evidence so you can decide, and isn't legal advice.</p>
+          <p class="hint" style="margin:14px 0 0;line-height:1.5">Only short music snippets are sent to Shazam (and a few frames to Google, if you add a key); everything else runs on this computer. YouTube's Content ID database is private, so for a guaranteed answer upload as Private and check YouTube Studio's Checks step. Not legal advice.</p>
         </div>
       </div>
     </section>
@@ -348,7 +351,7 @@
       <div class="card job-head">
         <div class="thumb"><img id="jobThumb" alt="" /></div>
         <div style="min-width:0"><h1 id="jobTitle"></h1><div class="meta" id="jobMeta"></div></div>
-        <div class="row"><a class="btn sm" id="ytLink" target="_blank" rel="noopener">Open source</a><button class="btn sm danger" id="cancelBtn">Cancel job</button></div>
+        <div class="row"><a class="btn sm" id="ytLink" target="_blank" rel="noopener">Open source</a><button class="btn sm primary" id="resumeBtn" hidden>Resume</button><button class="btn sm danger" id="cancelBtn">Cancel job</button></div>
       </div>
       <div class="grid-2" style="margin-top:14px">
         <div class="stack">
@@ -425,6 +428,7 @@
               <div class="field"><label>Gemini <span class="hint" id="setGeminiHint"></span></label><textarea id="setGeminiKey" rows="2" spellcheck="false"></textarea></div>
               <div class="field"><label>Groq <span class="hint" id="setGroqHint"></span></label><textarea id="setGroqKey" rows="2" spellcheck="false"></textarea></div>
               <div class="field"><label>Anthropic (Claude) <span class="hint" id="setKeyHint"></span></label><input type="password" id="setKey" placeholder="sk-ant-…" /></div>
+              <div class="field"><label>Google Cloud Vision <span class="hint" id="setVisionHint"></span></label><input type="password" id="setVisionKey" placeholder="AIza…  (optional: copyright check searches the web for your frames)" /></div>
             </div>
           </div>
           <div class="card" id="set-tx">
@@ -437,6 +441,13 @@
               </div>
               <label class="switch"><input type="checkbox" id="setMusic" /><span class="track"></span>
                 <span><b>Transcribe tool: remove background music by default</b><small>Used by the separate Transcribe tool only; clip creation never strips music.</small></span></label>
+            </div>
+          </div>
+          <div class="card" id="set-cr">
+            <div class="card-head"><h3>Copyright</h3></div>
+            <div class="fields">
+              <label class="switch"><input type="checkbox" id="setAutoCr" /><span class="track"></span>
+                <span><b>Check every exported clip automatically</b><small>Names songs (Shazam) and looks for watermarks, channel logos and broadcast footage. Runs in the background after each clip renders.</small></span></label>
             </div>
           </div>
           <div class="card" id="set-video">
@@ -480,7 +491,7 @@
     <div class="divider"></div>
     <label class="switch"><input type="checkbox" id="optTranscribe" checked /><span class="track"></span><span><b>Transcribe &amp; caption</b><small>Local speech-to-text (English)</small></span></label>
     <div class="field needs-tx"><label>Caption style</label>
-      <div class="seg" data-name="caption_style"><button type="button" data-value="bold" class="on"><span class="cap-bold">BOLD <em>WORD</em></span></button><button type="button" data-value="clean">Subtitle</button><button type="button" data-value="none">None</button></div></div>
+      <div class="seg" data-name="caption_style"><button type="button" data-value="bold" class="on"><span class="cap-bold">BOLD <em>WORD</em></span></button><button type="button" data-value="pop"><span class="cap-pop">POP <em>100%</em></span></button><button type="button" data-value="clean">Subtitle</button><button type="button" data-value="none">None</button></div></div>
     <label class="switch"><input type="checkbox" id="optEnhance" /><span class="track"></span><span><b>Enhance quality</b><small>Sharper, cleaner clips and balanced audio · adds render time</small></span></label>
     <label class="switch"><input type="checkbox" id="optAI" checked /><span class="track"></span><span><b>AI review</b><small id="aiHint">Re-rank moments and write titles</small></span></label>
     <div id="watchBox" hidden>
@@ -506,13 +517,16 @@
     <div class="ed-side">
       <div class="field"><label>Title</label><input type="text" id="edTitle" maxlength="200" /></div>
       <div class="field"><label>Format</label><div class="seg" data-name="ed_layout"><button type="button" data-value="vertical_blur">9:16 fit</button><button type="button" data-value="vertical_crop">9:16 crop</button><button type="button" data-value="original">16:9</button></div></div>
-      <div class="field" id="edCapField"><label>Captions</label><div class="seg" data-name="ed_caption_style"><button type="button" data-value="bold">Bold</button><button type="button" data-value="clean">Subtitle</button><button type="button" data-value="none">None</button></div></div>
+      <div class="field" id="edCapField"><label>Captions</label><div class="seg" data-name="ed_caption_style"><button type="button" data-value="bold">Bold</button><button type="button" data-value="pop">Pop</button><button type="button" data-value="clean">Subtitle</button><button type="button" data-value="none">None</button></div></div>
       <div class="ed-times"><div><small>Start</small><b id="edStart"></b></div><div><small>End</small><b id="edEnd"></b></div><div><small>Length</small><b id="edLen"></b></div></div>
+      <div class="field" id="edCapText"><label>Caption text <span class="hint">fix any misheard words · click a time to jump there</span></label><div class="cap-lines" id="edLines"></div></div>
     </div>
   </div>
   <div class="trim">
-    <div class="trim-track" id="trimTrack"><div class="trim-sel" id="trimSel"></div><div class="trim-handle" id="hStart" data-h="start"></div><div class="trim-handle" id="hEnd" data-h="end"></div><div class="trim-head" id="trimHead"></div></div>
+    <div class="trim-track" id="trimTrack"><div class="trim-bands" id="trimBands"></div><div class="trim-sel" id="trimSel"></div><div class="trim-handle" id="hStart" data-h="start"></div><div class="trim-handle" id="hEnd" data-h="end"></div><div class="trim-head" id="trimHead"></div></div>
     <div class="axis"><span id="trimMin"></span><span>Drag the handles · click to seek</span><span id="trimMax"></span></div>
+    <div class="cr-legend" id="edCrLegend"></div>
+    <p class="cr-warn" id="edCrWarn" hidden></p>
   </div>
   <div class="editor-actions">
     <div class="row"><button class="btn" id="edPlay">Play selection</button><button class="btn ghost" id="edSetStart">Set start here</button><button class="btn ghost" id="edSetEnd">Set end here</button></div>

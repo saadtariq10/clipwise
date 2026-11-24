@@ -25,6 +25,54 @@ log = logging.getLogger("hotclip")
 FULL_TRANSCRIBE_UNDER = 15 * 60   # short videos are always transcribed fully
 CONTENT_FIRST_UNDER = 75 * 60     # no audience data: transcribe fully and pick by content
 PAD = 12                          # extra context transcribed around candidates
+_CR_POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="copyright")
+
+
+def queue_copyright(job: Job, name: str) -> None:
+    """Check a finished clip for copyright problems in the background (one at a time, so
+    rendering keeps most of the CPU). The verdict lands in clip["copyright"]."""
+    if not load_settings().get("auto_copyright", True):
+        return
+    clip = job.clip(name)
+    if clip is None:
+        return
+    version = clip.get("version", 1)
+    with job.lock:
+        clip["copyright"] = {"status": "checking"}
+    _CR_POOL.submit(_check_clip, job, name, version)
+
+
+def _check_clip(job: Job, name: str, version: int) -> None:
+    from . import copyright
+    clip = job.clip(name)
+    if clip is None or clip.get("version", 1) != version or job.cancelled():
+        return
+    path = job.dir / clip["files"]["mp4"]
+    try:
+        r = copyright.check_file(path, {"title": clip.get("title"), "name": name, "file": path.name})
+        t0, dur = clip["start"], r.get("duration") or (clip["end"] - clip["start"])
+        songs = [[t0 + a, t0 + b, f"{m['song']} – {m['artist']}"] for (a, b), m in zip(r["song_ranges"], r["music"])]
+        visual = [[t0 + f.get("t0", 0), t0 + f.get("t1", dur), f"{f['name']} ({f['kind']})"]
+                  for f in r["visual"]["text"]]
+        visual += [[t0, t0 + dur, f"Logo in the {lg['where']} corner"] for lg in r["visual"]["logos"]]
+        if r["visual"]["cinema"]:
+            visual.append([t0, t0 + dur, "Movie-style widescreen framing"])
+        result = {"status": "done", "level": r["level"], "verdict": r["verdict"], "summary": r["summary"],
+                  "songs": [f"{m['song']} – {m['artist']}" for m in r["music"]],
+                  "flags": [e["text"] for e in r["evidence"] if e["level"] in ("bad", "warn")][:6],
+                  "ranges": {"checked": [t0, t0 + dur], "songs": songs, "visual": visual,
+                             "music": [[t0 + a, t0 + b] for a, b in r["music_ranges"]]}}
+    except Exception as exc:
+        log.warning("copyright check of %s failed: %s", name, exc, exc_info=True)
+        result = {"status": "failed", "error": logs.friendly(exc)}
+    clip = job.clip(name)
+    if clip is not None and clip.get("version", 1) == version:  # not re-rendered meanwhile
+        with job.lock:
+            clip["copyright"] = result
+        job.save()
+        log.info("copyright %s: %s", name, result.get("verdict") or result.get("error"))
+
+
 EDIT_PAD = 8                      # seconds kept around each clip so it can be re-trimmed
 SPECULATE = 3                     # likely clips downloaded while Whisper runs
 # YouTube throttles each partial download to ~real-time speed (measured: a 2-min section
@@ -227,9 +275,18 @@ def run(job: Job) -> None:
     if meta["source"] == "youtube":
         job.update("Downloading live stream audio (up to now)" if is_live else "Downloading audio", 0.04)
     t0 = time.time()
-    audio, file_start = src.audio(job.dir, start=opts.get("range_start") or None,
-                                  end=opts.get("range_end"),
-                                  progress=lambda p: job.update(progress=0.04 + p * 0.20))
+    ck = job.checkpoint
+    saved = job.dir / ck["audio"] if ck.get("audio") else None
+    if saved and saved.exists() and not is_live:  # resumed job: the audio is already here
+        audio, file_start = saved, float(ck.get("file_start") or 0)
+        log.info("resume: reusing downloaded audio %s", audio.name)
+    else:
+        audio, file_start = src.audio(job.dir, start=opts.get("range_start") or None,
+                                      end=opts.get("range_end"),
+                                      progress=lambda p: job.update(progress=0.04 + p * 0.20))
+        if meta["source"] == "youtube" and not is_live and audio.resolve().is_relative_to(job.dir.resolve()):
+            ck.update(audio=audio.resolve().relative_to(job.dir.resolve()).as_posix(), file_start=file_start)
+            job.save()
     log.info("audio ready: %s (%.1f MB) starting at %.1fs, took %.1fs", audio.name,
              audio.stat().st_size / 1e6, file_start, time.time() - t0)
     _check(job)
@@ -288,7 +345,7 @@ def run(job: Job) -> None:
     if full:
         job.update(f"Transcribing {_fmt(hi - lo)} of audio (local Whisper)", 0.32)
         t0 = time.time()
-        segments = transcribe(audio, lo - file_start, hi - lo, offset=file_start, **_whisper(job))
+        segments = _transcribe_cached(job, audio, lo - file_start, hi - lo, file_start)
         log.info("transcribed %d segments in %.1fs", len(segments), time.time() - t0)
         signals["speech"] = scoring.speech_signal(segments, n)
         _check(job)
@@ -337,6 +394,7 @@ def run(job: Job) -> None:
     job._state["segments"] = segments
     if meta["source"] == "youtube":
         audio.unlink(missing_ok=True)
+        job.checkpoint.pop("audio", None)
     log.info("analysis finished in %.1fs", time.time() - t_start)
     if job.watch["active"]:
         job.update("Watching the live stream for new moments")
@@ -344,6 +402,30 @@ def run(job: Job) -> None:
 
 def _score_and_render(job, src, fetcher, cands, segments, meta, settings, count,
                       min_len, max_len, hi, has_audience, do_transcribe, chain, ai_future) -> None:
+    saved = job.checkpoint.get("final")
+    if saved:  # resumed job: same clips as before (no second AI call, no different picks)
+        final = [Candidate(**d) for d in saved]
+        log.info("resume: reusing the %d chosen clips", len(final))
+    else:
+        final = _choose(job, cands, segments, meta, settings, count, min_len, max_len, hi,
+                        has_audience, chain, ai_future)
+        from dataclasses import asdict
+        job.checkpoint["final"] = [asdict(c) for c in final]
+        job.save()
+    todo = [c for c in final if not any(abs(cl["start"] - round(c.start, 2)) < 0.6 and
+                                        abs(cl["end"] - round(c.end, 2)) < 0.6 for cl in job.clips)]
+    if len(todo) < len(final):
+        log.info("resume: %d of %d clips already rendered", len(final) - len(todo), len(final))
+
+    # 6. render ---------------------------------------------------------------
+    if todo:
+        _render_candidates(job, src, todo, segments, 0.76, 0.22, fetcher)
+    if not job.clips:
+        raise RuntimeError("Every clip failed to render. See the activity log for details.")
+
+
+def _choose(job, cands, segments, meta, settings, count, min_len, max_len, hi, has_audience,
+            chain, ai_future) -> list[Candidate]:
 
     job.update("Scoring content (hook, emotion, payoff…)", 0.70)
     for c in cands:
@@ -369,11 +451,7 @@ def _score_and_render(job, src, fetcher, cands, segments, meta, settings, count,
     final.sort(key=lambda c: c.start)
     log.info("selected %d clips: %s", len(final),
              [f"{_fmt(c.start)}-{_fmt(c.end)} ({c.score})" for c in final])
-
-    # 6. render ---------------------------------------------------------------
-    _render_candidates(job, src, final, segments, 0.76, 0.22, fetcher)
-    if not job.clips:
-        raise RuntimeError("Every clip failed to render. See the activity log for details.")
+    return final
 
 
 # ---------------------------------------------------------------- watch mode
@@ -463,7 +541,8 @@ def watch(job: Job) -> None:
 # ---------------------------------------------------------------- editor
 
 def rerender(job: Job, name: str, start: float, end: float, title: str | None,
-             layout: str | None, caption_style: str | None) -> None:
+             layout: str | None, caption_style: str | None,
+             caption_edits: list[dict] | None = None) -> None:
     """Re-trim / restyle one clip (runs on the edit queue)."""
     clip = job.clip(name)
     if clip is None:
@@ -476,8 +555,11 @@ def rerender(job: Job, name: str, start: float, end: float, title: str | None,
     layout = layout or clip["layout"]
     caption_style = caption_style or clip["caption_style"]
     try:
-        segments = (transcribe(src_path, start - s0, end - start, offset=s0, **_whisper(job))
-                    if job.options.get("transcribe", True) else [])
+        segments = _rerender_segments(job, clip, src_path, s0, start, end)
+        # caption corrections from the editor (the clip's stored words already contain the
+        # earlier ones; all are kept on the clip as a record)
+        edits = captions.merge_edits(clip.get("caption_edits") or [], caption_edits or [])
+        segments = captions.apply_edits(segments, caption_edits or [])
         old_files = dict(clip["files"])
         version = clip.get("version", 1) + 1
         files, text = _render(job, name, version, src_path, s0, start, end, segments,
@@ -485,7 +567,9 @@ def rerender(job: Job, name: str, start: float, end: float, title: str | None,
         with job.lock:
             clip.update(start=round(start, 2), end=round(end, 2), duration=round(end - start, 1),
                         title=title or clip["title"], layout=layout, caption_style=caption_style,
-                        files=files, transcript=text, version=version, status="ready")
+                        files=files, transcript=text, version=version, status="ready",
+                        words=_clip_words(segments, start, end), caption_edits=edits)
+        queue_copyright(job, name)
         for f in old_files.values():  # best effort: Windows may still have it open
             try:
                 (job.dir / f).unlink(missing_ok=True)
@@ -509,7 +593,7 @@ def _transcribe_candidates(job: Job, media_file: Path, cands: list[Candidate], l
         if p_span:
             job.update(f"Transcribing moment {i + 1}/{len(cands)}", p0 + p_span * i / len(cands))
         a, b = max(lo, c.start - PAD), min(hi, c.end + PAD)
-        out += [s for s in transcribe(media_file, a - file_start, b - a, offset=file_start, **_whisper(job))
+        out += [s for s in _transcribe_cached(job, media_file, a - file_start, b - a, file_start)
                 if not any(abs(s.start - x.start) < 0.5 for x in out)]
     return sorted(out, key=lambda s: s.start)
 
@@ -658,9 +742,11 @@ def _render_all(job, cands, names, futures, segments, layout, caption_style, p0,
                 "title": c.title, "hook": c.hook, "hashtags": c.hashtags, "reasons": c.reasons,
                 "breakdown": c.breakdown, "why": c.why,
                 "transcript": text, "files": files, "layout": layout, "caption_style": caption_style,
+                "words": _clip_words(segments, c.start, c.end),
                 "src": {"path": src_path.relative_to(DATA_DIR).as_posix(),
                         "start": round(s0, 2), "end": round(s1, 2)},
             })
+        queue_copyright(job, name)
         job.save()
 
 
@@ -675,12 +761,19 @@ def _render(job: Job, name: str, version: int, src_path: Path, src_start: float,
     local = _shift(segments, start)
     ass = captions.write_ass(job.dir / f"{stem}.ass", local, 0, dur, width, height, caption_style)
     out = job.dir / f"{stem}.mp4"
+    vf = None
+    cmd_file = job.dir / f"{stem}.crop.cmd"
+    if layout == "vertical_crop":  # follow the speaker's face instead of a fixed center crop
+        from . import reframe
+        info = media.probe(src_path)
+        vf = reframe.plan(src_path, start - src_start, dur, info["width"], info["height"], cmd_file)
     try:
         media.render_clip(src_path, out, start - src_start, dur, layout, ass,
-                          enhance=bool(job.options.get("enhance")))
+                          enhance=bool(job.options.get("enhance")), vf_override=vf)
     finally:
         if ass:
             ass.unlink(missing_ok=True)
+        cmd_file.unlink(missing_ok=True)
     media.thumbnail(out, job.dir / f"{stem}.jpg", min(dur / 3, 5))
     files = {"mp4": out.name, "jpg": f"{stem}.jpg"}
     text = captions.transcript_text(segments, start, end) if segments else ""
@@ -713,6 +806,60 @@ def _dedupe(cands: list[Candidate]) -> list[Candidate]:
         if all(c.end <= k.start or c.start >= k.end for k in kept):
             kept.append(c)
     return kept
+
+
+def _rerender_segments(job: Job, clip: dict, src_path: Path, s0: float, start: float,
+                       end: float) -> list[Segment]:
+    """Captions for a re-render. The clip's current words (including the user's caption
+    fixes) are reused for the part that was already transcribed; Whisper only runs on
+    audio the new range adds. Re-transcribing everything would undo fixes, since Whisper
+    can time the same words differently on a second pass."""
+    if not job.options.get("transcribe", True):
+        return []
+    old = clip.get("words")
+    if old is None:  # clip from before caption editing existed
+        return transcribe(src_path, start - s0, end - start, offset=s0, **_whisper(job))
+    a, b = clip["start"], clip["end"]
+    words = [Word(w[0], w[1], w[2]) for w in old if w[1] > start and w[0] < end]
+    for lo, hi in ((start, min(a, end)), (max(b, start), end)):  # extensions only
+        if hi - lo > 0.3:
+            new = transcribe(src_path, lo - s0, hi - lo, offset=s0, **_whisper(job))
+            words += [w for s in new for w in s.words
+                      if lo <= (w.start + w.end) / 2 < hi]
+    words.sort(key=lambda w: w.start)
+    return captions._regroup(words)
+
+
+def _transcribe_cached(job: Job, media_file: Path, start: float, duration: float,
+                       offset: float) -> list[Segment]:
+    """Whisper with a per-job cache on disk, so a resumed job never transcribes the same
+    audio twice (transcription is usually the slowest step)."""
+    cache_file = job.dir / "transcribe_cache.json"
+    key = f"{start:.2f}+{duration:.2f}@{offset:.2f}"
+    try:
+        cache = json.loads(cache_file.read_text("utf-8"))
+    except (OSError, ValueError):
+        cache = {}
+    if key in cache:
+        return [Segment(d["start"], d["end"], d["text"], [Word(**w) for w in d.get("words", [])])
+                for d in cache[key]]
+    segments = transcribe(media_file, start, duration, offset=offset, **_whisper(job))
+    with job.lock:
+        try:
+            cache = json.loads(cache_file.read_text("utf-8"))
+        except (OSError, ValueError):
+            cache = {}
+        cache[key] = [s.to_dict() for s in segments]
+        tmp = cache_file.with_suffix(".tmp")
+        tmp.write_text(json.dumps(cache, ensure_ascii=False), "utf-8")
+        tmp.replace(cache_file)
+    return segments
+
+
+def _clip_words(segments: list[Segment], start: float, end: float) -> list[list]:
+    """Words spoken inside [start, end] (absolute source time) for the caption editor."""
+    return [[round(w.start, 2), round(w.end, 2), w.text] for s in segments for w in s.words
+            if w.end > start and w.start < end]
 
 
 def _shift(segments: list[Segment], offset: float) -> list[Segment]:

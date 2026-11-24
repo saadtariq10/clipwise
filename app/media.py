@@ -69,9 +69,12 @@ def probe(path: Path) -> dict:
     duration = int(m[1]) * 3600 + int(m[2]) * 60 + float(m[3]) if m else 0.0
     v = re.search(r"Video:.*?(\d{2,5})x(\d{2,5})", err)
     fps = re.search(r"(\d+(?:\.\d+)?) fps", err)
+    w, h = (int(v[1]), int(v[2])) if v else (0, 0)
+    rot = re.search(r"rotation of (-?\d+(?:\.\d+)?) degrees|rotate\s*:\s*(-?\d+)", err)
+    if rot and abs(round(float(rot[1] or rot[2]))) % 180 == 90:
+        w, h = h, w  # phone video stored sideways: ffmpeg rotates frames on decode
     return {"duration": duration, "has_video": " Video:" in err, "has_audio": " Audio:" in err,
-            "width": int(v[1]) if v else 0, "height": int(v[2]) if v else 0,
-            "fps": float(fps[1]) if fps else 0.0}
+            "width": w, "height": h, "fps": float(fps[1]) if fps else 0.0}
 
 
 def loudness_per_second(audio_file: Path) -> np.ndarray:
@@ -125,12 +128,15 @@ NVENC = ["-c:v", "h264_nvenc", "-preset", "p5", "-rc", "vbr", "-cq", "21", "-b:v
 
 
 def render_clip(source: Path, out_file: Path, offset: float, duration: float,
-                layout: str, ass_file: Path | None, enhance: bool = False) -> None:
+                layout: str, ass_file: Path | None, enhance: bool = False,
+                vf_override: str | None = None) -> None:
     """Trim, reframe, burn captions and encode a share-ready MP4 (GPU if available).
     With `enhance`, applies the measured adaptive enhancement (see enhance.py)."""
     from . import enhance as enh
 
     _, _, vf = LAYOUTS.get(layout, LAYOUTS["original"])
+    if vf_override:  # e.g. face-tracked crop (reframe.py), same output size as the layout
+        vf = vf_override
     audio_args: list[str] = []
     video_codec, nvenc_codec = X264, NVENC
     if enhance:

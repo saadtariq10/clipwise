@@ -44,12 +44,16 @@ The current version is in the `VERSION` file and in the black window's first lin
 - **Live streams:** analyzes from the start of the stream up to *now*. Clipwise fetches the stream's DVR fragments directly, so it stops exactly at "now" and can fetch any part of a 120-hour DVR quickly.
 - **Watch mode** (live only): re-checks the stream every N minutes, analyzes only the new part (including **live chat** recorded while watching), and adds new clips automatically until the stream ends or you click *Stop watching*.
 - **Transcription on/off:** local English Whisper. Off is the fastest mode: no captions or transcripts, and moments are picked from audience and audio signals only.
-- **Captions:** bold word-highlight (Shorts style), clean subtitle, or none. Also SRT and TXT per clip, plus a full transcript.
-- **Formats:** Shorts 9:16 (fit with blurred background, or crop) or 16:9.
+- **Captions:** bold word-highlight (Shorts style), **pop** (each word bounces in; numbers turn green and strong words red), clean subtitle, or none. Also SRT and TXT per clip, plus a full transcript.
+- **Formats:** Shorts 9:16 (fit with blurred background, or **face-tracking crop** that follows the speaker like a camera operator) or 16:9.
+- **Learns your taste:** 👍/👎 on clips. After 3 votes, the ranking leans toward the qualities (hook, emotion, payoff…) of clips you liked.
+- **Clean cuts:** clips end at the end of a sentence, not mid-thought.
 - **Clip editor:** drag the start/end handles over the source (±30 s around each clip for YouTube, ±90 s for local files), change title, format and captions, then re-render.
 - **NVIDIA GPU:** used automatically for rendering (NVENC) and transcription (CUDA) when available, with automatic fallback to the CPU.
 - **Optional AI ranking:** Gemini (keys 1→2→3), then Groq (keys 1→2→3), optionally Claude. Picks the strongest candidates, trims them, writes title, hook and hashtags.
-- **Tools:** Transcribe (works through background music), Enhance video (choose 1080p, 2K or 4K and strength; YouTube links download the real 2K/4K source), Copyright check (YouTube link, or your own edited video: finds every part with background music).
+- **Tools:** Transcribe (works through background music), Enhance video (choose 1080p, 2K or 4K and strength; YouTube links download the real 2K/4K source), Copyright check (YouTube link, or your own edited video: finds background music, **names the song** via Shazam, spots TikTok/Instagram watermarks, @creator tags, TV/sports logos, scoreboards and movie framing, optionally searches the web for your frames with a Google Cloud Vision key, and can **remove the music while keeping the voice** in one click).
+- **Automatic copyright check:** every exported clip is checked in the background and gets a 🟢/🟡/🔴 badge.
+- **yt-dlp stays current:** checked once a day at startup (from source), since outdated yt-dlp is the usual reason YouTube downloads break.
 
 ## How it finds "hot" moments
 
@@ -75,7 +79,7 @@ The top peaks become candidate windows (lead-in before the peak, payoff after). 
 
 ## Settings (gear icon)
 
-- **Anthropic API key**: enables AI ranking. Stored only in `data/settings.json`.
+- **API keys** (Gemini, Groq, Anthropic, optional Google Cloud Vision): stored in the git-ignored `.env` file, never in `data/settings.json`.
 - **Transcription quality**: `small` (default, English-only model). Use `base` on slow PCs, or `medium` / `large-v3-turbo` with an NVIDIA GPU.
 - **Processor**: Auto uses an NVIDIA GPU for transcription when CUDA is available. The settings dialog shows what was detected.
 
@@ -93,7 +97,14 @@ app/
   media.py       ffmpeg: probing, loudness, rendering (NVENC or x264), thumbnails
   llm.py         optional Claude re-ranking (structured output)
   jobs.py        job queue, edit queue, watch threads, JSON persistence
+  copyright.py   copyright checks (YouTube link + local file) and the remove-music fix
+  songid.py      song identification (Shazam) on music-only audio
+  visual_check.py watermarks, logos, on-screen text (local OCR), movie framing, web search
+  reframe.py     face-tracking 9:16 crop
+  feedback.py    👍/👎 learning for the ranking
+  updater.py     daily yt-dlp update check
 web/             vanilla HTML/CSS/JS UI (no build step)
+tests/           unit tests: python -m unittest discover -s tests
 build_exe.py     PyInstaller build (run via build_exe.bat on Windows)
 ```
 

@@ -3,6 +3,7 @@ video enhancement. Each runs as its own job kind and produces downloadable files
 from __future__ import annotations
 
 import json
+import re
 import logging
 import time
 
@@ -114,7 +115,7 @@ def _burn_captions(job: Job, src, meta: dict, segments: list[Segment], duration:
         raise RuntimeError("This file has no video track to put captions on.")
     w, h = info["width"] or 1920, info["height"] or 1080
     ass = captions.write_ass(job.dir / "captions.ass", segments, 0, duration + 1, w, h,
-                             style if style in ("bold", "clean") else "bold")
+                             style if style in ("bold", "pop", "clean") else "bold")
     job.update("Rendering captioned video", 0.9)
     out = job.dir / "captioned.mp4"
     vf = f"scale=trunc(iw/2)*2:trunc(ih/2)*2,ass={ass.name},format=yuv420p"
@@ -232,7 +233,38 @@ def run_copyright(job: Job) -> None:
     if meta.get("source") != "file":
         job.result = copyright.check(meta.get("url") or job.source.get("url"))
         return
-    job.update("Listening for background music", 0.05)
-    job.result = copyright.check_file(src.path, meta,
-                                      progress=lambda p: job.update(progress=0.05 + p * 0.9),
-                                      cancelled=job.cancelled)
+    stages = [(0.0, "Listening for background music"), (0.48, "Identifying songs"),
+              (0.6, "Checking the picture for watermarks and logos"), (0.75, "Reading on-screen text")]
+
+    def prog(p: float) -> None:
+        stage = next(s for at, s in reversed(stages) if p >= at)
+        job.update(stage, 0.03 + p * 0.95)
+
+    prog(0)
+    job.result = copyright.check_file(src.path, meta, progress=prog, cancelled=job.cancelled)
+
+
+def run_musicfix(job: Job) -> None:
+    """Copy of an uploaded video with the music removed (voice kept) in the given ranges."""
+    from . import copyright
+
+    src = _source(job)
+    meta = job.meta = src.load()
+    if meta.get("source") != "file":
+        raise RuntimeError("Music removal works on uploaded files.")
+    ranges = job.options.get("ranges") or []
+    if not ranges:
+        raise RuntimeError("There's no music to remove.")
+    secs = sum(b - a for a, b in ranges)
+    job.update(f"Removing music from {_hms(secs)} of audio, keeping the voice", 0.03)
+    stem = re.sub(r"[\\/:*?\"<>|]+", "_", (meta.get("title") or meta.get("name") or "video").rsplit(".", 1)[0])[:80]
+    out = job.dir / f"{stem} (no music).mp4"
+    copyright.remove_music(src.path, ranges, out, progress=lambda p: job.update(progress=0.03 + p * 0.95),
+                           cancelled=job.cancelled)
+    from .config import DATA_DIR
+    try:
+        original = "/data/" + src.path.resolve().relative_to(DATA_DIR.resolve()).as_posix()
+    except ValueError:
+        original = None
+    job.result = {"files": {"video": out.name}, "original": original, "ranges": ranges, "seconds": secs,
+                  "size_mb": round(out.stat().st_size / 1e6, 1)}

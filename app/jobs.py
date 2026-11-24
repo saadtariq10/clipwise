@@ -42,6 +42,7 @@ class Job:
         self.finished: float | None = None
         self.created = time.time()
         self.log: list[str] = []
+        self.checkpoint: dict = {}      # finished steps a resumed job can skip (see pipeline.run)
         self.lock = threading.RLock()
         self._cancel = threading.Event()
         self.stop_watch = threading.Event()
@@ -99,6 +100,12 @@ class Job:
     def cancelled(self) -> bool:
         return self._cancel.is_set()
 
+    def resumable(self) -> bool:
+        """Failed, cancelled or interrupted jobs can be picked up again. Live streams that
+        were being watched can't (the stream has moved on); start a new job for those."""
+        return (self.status in ("error", "cancelled")
+                and self.meta.get("live_status") != "is_live")
+
     def clip(self, name: str) -> dict | None:
         return next((c for c in self.clips if c["name"] == name), None)
 
@@ -136,12 +143,12 @@ class Job:
             "progress": self.progress, "error": self.error, "meta": self.meta,
             "created": self.created, "clip_count": len(self.clips), "watch": self.watch,
             "warnings": self.warnings, "started": self.started, "finished": self.finished,
-            "eta": self._eta(), "options": self.options,
+            "eta": self._eta(), "options": self.options, "resumable": self.resumable(),
         }
         if full:
             data.update(stages=self.stages[-80:], result=self.result,
                         downloads=self.download_summary())
-            data.update(clips=self.clips, timeline=self.timeline,
+            data.update(clips=self.clips, timeline=self.timeline, checkpoint=self.checkpoint,
                         transcript_file=self.transcript_file, log=self.log[-60:])
         return data
 
@@ -158,10 +165,10 @@ class Job:
         job = cls(d["source"], d.get("options", {}), d["id"], d.get("kind", "clips"))
         for key in ("status", "stage", "progress", "error", "meta", "clips", "timeline",
                     "transcript_file", "created", "log", "watch", "warnings", "stages", "result",
-                    "started", "finished"):
+                    "started", "finished", "checkpoint"):
             setattr(job, key, d.get(key, getattr(job, key)))
         if job.status in ("queued", "running"):   # app was closed mid-job
-            job.status, job.error = "error", "Interrupted (the app was closed)."
+            job.status, job.error = "error", "Interrupted (the app was closed). Click Resume to continue where it stopped."
         if job.watch.get("active"):
             job.watch.update(active=False, note="Watching stopped because the app was closed.")
         for c in job.clips:
@@ -241,6 +248,21 @@ class JobManager:
                 job.watch.update(active=False, next_check=None)
                 log.info("WATCH END after %d checks", job.watch["rounds"])
                 job.save()
+
+    def resume(self, job: Job) -> Job:
+        """Run a failed / cancelled / interrupted job again in place. Its checkpoints (audio,
+        transcripts, chosen clips) and already-rendered clips are reused, so only the
+        missing work is done."""
+        if not job.resumable():
+            raise ValueError("This job can't be resumed.")
+        job._cancel.clear()
+        job.stop_watch.clear()
+        job.status, job.error, job.finished = "queued", None, None
+        job.stage = "Waiting in queue (resuming)"
+        job.log.append("Resumed: skipping the steps that already finished.")
+        job.save()
+        self._pool.submit(self._run, job)
+        return job
 
     def submit_edit(self, job: Job, fn: Callable[[], None], label: str) -> None:
         def run():

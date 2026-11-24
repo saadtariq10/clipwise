@@ -35,6 +35,13 @@ def _startup() -> None:
     def report():
         log.info("Clipwise starting: %s", json.dumps(logs.system_report(), indent=2))
     threading.Thread(target=report, daemon=True).start()  # ffmpeg/GPU probing can take a moment
+    from . import updater
+    updater.start_background_check()  # keep yt-dlp current (YouTube changes often)
+    # copyright checks that were still running when the app closed: run them again
+    for job in list(manager.jobs.values()):
+        for clip in job.clips:
+            if (clip.get("copyright") or {}).get("status") == "checking":
+                pipeline.queue_copyright(job, clip["name"])
 
 
 @app.middleware("http")
@@ -55,12 +62,12 @@ async def _log_requests(request: Request, call_next):
     return response
 manager = JobManager({"clips": pipeline.run, "transcribe": tools.run_transcribe,
                       "enhance": tools.run_enhance,
-     "copyright": tools.run_copyright}, pipeline.watch)
+     "copyright": tools.run_copyright, "musicfix": tools.run_musicfix}, pipeline.watch)
 
 YT_URL = re.compile(r"^https?://(www\.|m\.)?(youtube\.com|youtu\.be)/", re.I)
 VIDEO_EXT = {".mp4", ".mkv", ".mov", ".webm", ".avi", ".m4v", ".flv", ".wmv", ".ts"}
 LAYOUT = "^(original|vertical_crop|vertical_blur)$"
-CAPTIONS = "^(bold|clean|none)$"
+CAPTIONS = "^(bold|pop|clean|none)$"
 
 
 class JobRequest(BaseModel):
@@ -93,7 +100,7 @@ class TranscribeRequest(SourceRequest):
     model: str = Field("auto", pattern="^(auto|base|small|medium|large-v3-turbo)$")
     engine: str = Field("local", pattern="^(local|groq)$")
     burn: bool = False
-    caption_style: str = Field("bold", pattern="^(bold|clean)$")
+    caption_style: str = Field("bold", pattern="^(bold|pop|clean)$")
 
 
 class EnhanceRequest(SourceRequest):
@@ -115,7 +122,14 @@ def _tool_source(req: SourceRequest) -> dict:
     raise HTTPException(400, "Please paste a YouTube link or upload a video file.")
 
 
+class CaptionEdit(BaseModel):
+    start: float = Field(ge=0)
+    end: float = Field(ge=0)
+    text: str = Field("", max_length=500)
+
+
 class EditRequest(BaseModel):
+    caption_edits: list[CaptionEdit] | None = Field(None, max_length=500)
     start: float = Field(ge=0)
     end: float = Field(gt=0)
     title: str | None = Field(None, max_length=200)
@@ -130,6 +144,7 @@ class SettingsRequest(BaseModel):
     gemini_fallback_model: str | None = None
     groq_api_keys: list[str] | None = None
     anthropic_api_key: str | None = None
+    google_vision_api_key: str | None = None
     anthropic_model: str | None = None
     transcriber: str | None = Field(None, pattern="^(local|groq)$")
     ai_watch_video: bool | None = None
@@ -137,6 +152,7 @@ class SettingsRequest(BaseModel):
     whisper_model: str | None = None
     whisper_device: str | None = None
     video_quality: int | None = Field(None, ge=144, le=2160)
+    auto_copyright: bool | None = None
 
 
 def _job(job_id: str):
@@ -232,6 +248,16 @@ def tool_copyright(req: SourceRequest):
     return manager.submit(_tool_source(req), {}, kind="copyright").to_dict()
 
 
+@app.post("/api/tools/copyright/{job_id}/fix")
+def tool_copyright_fix(job_id: str):
+    """Remove the music (keep voice) from the parts a finished copyright check flagged."""
+    check = _job(job_id)
+    ranges = (check.result or {}).get("music_ranges") or []
+    if check.kind != "copyright" or check.source.get("type") != "file" or not ranges:
+        raise HTTPException(400, "This check has no music to remove.")
+    return manager.submit(check.source, {"ranges": ranges, "check_id": job_id}, kind="musicfix").to_dict()
+
+
 @app.get("/api/jobs")
 def list_jobs():
     jobs = sorted(manager.jobs.values(), key=lambda j: j.created, reverse=True)
@@ -247,6 +273,14 @@ def get_job(job_id: str):
 def cancel_job(job_id: str):
     _job(job_id).cancel()
     return {"ok": True}
+
+
+@app.post("/api/jobs/{job_id}/resume")
+def resume_job(job_id: str):
+    try:
+        return manager.resume(_job(job_id)).to_dict()
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
 
 
 @app.post("/api/jobs/{job_id}/stop-watch")
@@ -274,10 +308,42 @@ def edit_clip(job_id: str, name: str, req: EditRequest):
         raise HTTPException(400, "Clips must be between 3 seconds and 5 minutes.")
     clip["status"] = "rendering"
     job.save()
+    edits = [e.model_dump() for e in req.caption_edits or []]
     manager.submit_edit(job, lambda: pipeline.rerender(
-        job, name, req.start, req.end, req.title, req.layout, req.caption_style),
+        job, name, req.start, req.end, req.title, req.layout, req.caption_style, edits),
         label=f"{name} -> {req.start:.1f}-{req.end:.1f}s")
     return clip
+
+
+class FeedbackRequest(BaseModel):
+    vote: int = Field(ge=-1, le=1)   # 1 = good clip, -1 = bad clip, 0 = clear
+
+
+@app.post("/api/jobs/{job_id}/clips/{name}/feedback")
+def clip_feedback(job_id: str, name: str, req: FeedbackRequest):
+    """Thumbs up/down on a clip: teaches the ranking what you consider a good clip."""
+    from . import feedback
+    job = _job(job_id)
+    clip = job.clip(name)
+    if not clip:
+        raise HTTPException(404, "Clip not found")
+    with job.lock:
+        clip["feedback"] = req.vote
+    job.save()
+    return feedback.record(job_id, clip, req.vote)
+
+
+@app.get("/api/feedback")
+def feedback_summary():
+    from . import feedback
+    return feedback.summary()
+
+
+@app.post("/api/feedback/reset")
+def feedback_reset():
+    from . import feedback
+    feedback.reset()
+    return feedback.summary()
 
 
 @app.get("/api/jobs/{job_id}/zip")
@@ -396,7 +462,7 @@ def _gpu() -> dict:
 async def get_settings():
     s = load_settings()
     keys = {}
-    for name in ("anthropic", "gemini", "groq"):  # never send keys back to the browser
+    for name in ("anthropic", "gemini", "groq", "google_vision"):  # never send keys back to the browser
         found = api_keys(s, name)
         s.pop(f"{name}_api_key", None)
         s.pop(f"{name}_api_keys", None)

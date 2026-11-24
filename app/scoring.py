@@ -66,8 +66,20 @@ WEIGHTS = {"chat": 0.35, "comments": 0.30, "replay": 0.25, "speech": 0.20, "audi
 AUDIENCE = {"chat", "comments", "replay"}
 SPARSE = {"comments", "replay"}
 AUDIO_WITH_AUDIENCE = 0.04
-CONTENT_WEIGHTS = {"hook": 0.24, "standalone": 0.16, "emotion": 0.20, "quotable": 0.14,
+BASE_CONTENT_WEIGHTS = {"hook": 0.24, "standalone": 0.16, "emotion": 0.20, "quotable": 0.14,
                    "novelty": 0.10, "payoff": 0.16}
+
+
+
+
+def content_weights() -> dict[str, float]:
+    """Base rubric weights, personalised by the user's votes (feedback.py)."""
+    from . import feedback
+    try:
+        return feedback.weights(BASE_CONTENT_WEIGHTS)
+    except Exception as exc:  # a broken feedback file must never break clipping
+        log.warning("feedback weights unavailable: %s", exc)
+        return dict(BASE_CONTENT_WEIGHTS)
 
 
 @dataclass
@@ -299,6 +311,15 @@ def _sentences(segments: list[Segment], start: float, end: float) -> list[Segmen
     return [s for s in segments if s.end > start and s.start < end and s.text.strip()]
 
 
+TERMINAL = re.compile(r"[.!?…][\"'”’)\]]*$")
+
+
+def _punctuated(segments: list[Segment]) -> bool:
+    """Whisper (local) punctuates; Groq transcripts often don't, so sentence ends are unknown."""
+    sample = segments[:200]
+    return bool(sample) and sum(bool(TERMINAL.search(s.text.strip())) for s in sample) / len(sample) > 0.3
+
+
 QUESTION_START = re.compile(r"^(are|is|do|does|did|what|why|how|who|where|when|can|could|would|"
                             r"should|will|have|has|was|were|isn'?t|aren'?t|don'?t)\b", re.I)
 
@@ -356,6 +377,11 @@ def refine_with_transcript(c: Candidate, segments: list[Segment], min_len: int,
              if s.end <= start + max_len + 1]
     must_cover = max(c.peak, c.cover_until) + 3
     end_seg = next((s for s in after if s.end >= max(must_cover, start + min_len)), after[-1] if after else None)
+    if end_seg and _punctuated(segments) and not TERMINAL.search(end_seg.text.strip()):
+        # don't stop mid-sentence: run on to the end of the thought if it fits
+        done = next((s for s in after if s.start >= end_seg.start and TERMINAL.search(s.text.strip())), None)
+        if done:
+            end_seg = done
     end = (end_seg.end + 0.5) if end_seg else start + min_len
     end = min(max(end, start + min_len), start + max_len, duration)
     c.start, c.end = start, end
@@ -381,7 +407,7 @@ def refine_with_transcript(c: Candidate, segments: list[Segment], min_len: int,
                  + (0.3 if "!" in last_part else 0) + (0.2 if qa else 0) + 0.3 * c.breakdown.get("audio", 0))
     content = {"hook": hook, "standalone": max(standalone, 0), "emotion": emotion,
                "quotable": quotable, "novelty": novelty, "payoff": payoff}
-    content_score = sum(content[k] * w for k, w in CONTENT_WEIGHTS.items())
+    content_score = sum(content[k] * w for k, w in content_weights().items())
     c.breakdown.update({k: round(v, 2) for k, v in content.items()})
     c.content_score = content_score
     c.score = _blend(c, content_score, has_audience)
@@ -440,7 +466,7 @@ def rescore_relative(cands: list[Candidate], has_audience: bool) -> None:
         for dim in ("emotion", "quotable", "payoff"):
             rel[dim] = rel.pop(dim + "_rel")
             c.breakdown.pop(dim + "_rel")
-        content = sum(rel.get(k, 0) * w for k, w in CONTENT_WEIGHTS.items())
+        content = sum(rel.get(k, 0) * w for k, w in content_weights().items())
         c.score = _blend(c, content, has_audience)
         c.why = _why(c, content, has_audience)
 

@@ -44,12 +44,14 @@ DEFAULT_SETTINGS = {
     "ai_watch_video": False,       # opt-in: Gemini also watches the finalists (more quota, slower)
     "remove_music": True,          # Transcribe tool default: isolate voices before transcribing
     "anthropic_api_key": "",
+    "google_vision_api_key": "",   # optional: reverse image search in the copyright check
     "anthropic_model": "claude-opus-5-5",
     "transcriber": "local",        # local (best quality, offline) | groq (very fast, no punctuation)
     "groq_api_key": "",            # legacy single key (merged into groq_api_keys)
     "groq_api_keys": [],
     "whisper_model": "small",      # tiny | base | small | medium (English-only variants) | large-v3-turbo
     "whisper_device": "auto",      # auto | cpu | cuda
+    "auto_copyright": True,        # check every exported clip for songs / watermarks / logos
     "video_quality": 2160,         # best available (SDR). Max source height: 2160 | 1440 | 1080 | 720 | 480 | 360 (360 = fast tests)
 }
 
@@ -58,6 +60,7 @@ SECRET_FIELDS = {
     "gemini_api_keys": "GEMINI_API_KEYS",
     "groq_api_keys": "GROQ_API_KEYS",
     "anthropic_api_key": "ANTHROPIC_API_KEY",
+    "google_vision_api_key": "GOOGLE_VISION_API_KEY",
 }
 _LEGACY_SECRETS = ("gemini_api_key", "groq_api_key")  # old single-key fields, folded into the lists
 

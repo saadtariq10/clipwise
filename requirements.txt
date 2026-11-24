@@ -7,3 +7,5 @@ static-ffmpeg>=2.7     # auto-downloads ffmpeg if not installed
 numpy>=1.26
 anthropic>=0.70        # optional AI ranking (only used if an API key is set)
 requests>=2.31           # Gemini + Groq APIs (both optional)
+shazamio>=0.7          # copyright check: names songs in background music (Shazam catalogue)
+rapidocr_onnxruntime>=1.4  # copyright check: reads watermarks / logos on screen (local OCR)

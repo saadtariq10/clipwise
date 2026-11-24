@@ -362,6 +362,8 @@ function renderJobHeader(job, working) {
   $("#ytLink").hidden = !m.url;
   if (m.url) $("#ytLink").href = m.url;
   $("#cancelBtn").hidden = !working;
+  $("#resumeBtn").hidden = !job.resumable;
+  $("#resumeBtn").title = "Continue where it stopped: finished steps and rendered clips are kept";
   $$('[data-view="job"] .log-link').forEach((a) => (a.href = `/data/jobs/${job.id}/job.log?download=1`));
   $("#diagBtn").href = `/api/diagnostics?job_id=${job.id}`;
 }
@@ -502,13 +504,30 @@ setInterval(() => {
   if (state.view === "job" && state.job?.status === "running") renderProgress(state.job, true);
 }, 1000);
 
+$("#resumeBtn").addEventListener("click", async () => {
+  try {
+    await api(`/api/jobs/${state.jobId}/resume`, { method: "POST" });
+    toast("Resuming: finished steps are skipped");
+    await refreshJob();
+    ensurePolling();
+  } catch (e) { toast(e.message); }
+});
 $("#cancelBtn").addEventListener("click", async () => { await api(`/api/jobs/${state.jobId}/cancel`, { method: "POST" }).catch(() => {}); toast("Cancelling…"); });
 $("#stopWatchBtn").addEventListener("click", async () => { await api(`/api/jobs/${state.jobId}/stop-watch`, { method: "POST" }).catch(() => {}); toast("Monitoring stops after the current check"); refreshJob(); });
 $("#deleteJobBtn").addEventListener("click", () => deleteJob(state.jobId, () => (location.hash = "#/library")));
 
 // ---------------------------------------------------------------- results
 const base = (job) => `/data/jobs/${job.id}/`;
-const clipKey = (c) => `${c.name}:${c.version}:${c.status}`;
+const clipKey = (c) => `${c.name}:${c.version}:${c.status}:${c.copyright?.status || ""}`;
+function crBadge(c) {
+  const r = c.copyright;
+  if (!r) return "";
+  if (r.status === "checking") return `<span class="pill cr-clip" title="Checking songs, watermarks and logos">© checking…</span>`;
+  if (r.status === "failed") return `<span class="pill cr-clip" title="${esc(r.error || "")}">© not checked</span>`;
+  const cls = { good: "ok", warn: "warn", bad: "bad" }[r.level] || "";
+  const tip = [r.summary, ...(r.flags || [])].filter(Boolean).join("\n• ");
+  return `<span class="pill cr-clip ${cls}" title="${esc(tip)}"><span class="dot"></span>© ${esc(r.verdict)}</span>`;
+}
 function renderResults(job) {
   const clips = [...job.clips].sort((a, b) => a.start - b.start);
   $("#results").hidden = false;
@@ -555,7 +574,7 @@ function clipCard(job, c, rank) {
   el.innerHTML = `
     <div class="media ${vertical ? "vertical" : ""}">
       <video src="${base(job)}${f.mp4}" poster="${base(job)}${f.jpg}" controls preload="none" playsinline></video>
-      <div class="badges"><span class="pill">#${rank}</span><span class="pill">${esc(c.category)}</span></div>
+      <div class="badges"><span class="pill">#${rank}</span><span class="pill">${esc(c.category)}</span>${crBadge(c)}</div>
       ${c.status === "rendering" ? `<div class="rendering">Re-rendering…</div>` : ""}
     </div>
     <div class="body">
@@ -565,6 +584,7 @@ function clipCard(job, c, rank) {
       ${c.hook ? `<p class="caption">${esc(c.hook)}</p>` : ""}
       ${c.hashtags?.length ? `<p class="tags">${c.hashtags.map(esc).join(" ")}</p>` : ""}
       <div class="reasons">${c.reasons.slice(0, 3).map((r) => `<span class="pill">${esc(r)}</span>`).join("")}</div>
+      ${c.copyright?.status === "done" && c.copyright.level !== "good" ? `<details class="cr-details"><summary>Copyright: ${esc(c.copyright.verdict)}</summary><p>${esc(c.copyright.summary)}</p>${(c.copyright.flags || []).map((f) => `<p class="hint">• ${esc(f)}</p>`).join("")}</details>` : ""}
       ${whyPanel(c)}
       ${c.transcript ? `<details><summary>Transcript</summary><p>${esc(c.transcript)}</p></details>` : ""}
     </div>
@@ -574,7 +594,20 @@ function clipCard(job, c, rank) {
       ${f.txt ? `<a class="btn sm" href="${base(job)}${f.txt}?download=1">TXT</a>` : ""}
       <button class="btn sm" data-act="edit" ${c.status === "rendering" ? "disabled" : ""}>Edit</button>
       <button class="btn sm ghost" data-act="copy">Copy title</button>
+      <span class="vote" title="Teach Clipwise what a good clip is for you">
+        <button class="btn sm ghost ${c.feedback > 0 ? "on" : ""}" data-vote="1" aria-label="Good clip">👍</button>
+        <button class="btn sm ghost ${c.feedback < 0 ? "on" : ""}" data-vote="-1" aria-label="Bad clip">👎</button>
+      </span>
     </div>`;
+  $$("[data-vote]", el).forEach((b) => b.addEventListener("click", async () => {
+    const v = +b.dataset.vote, next = c.feedback === v ? 0 : v;
+    try {
+      const s = await api(`/api/jobs/${job.id}/clips/${c.name}/feedback`, { method: "POST", body: { vote: next } });
+      c.feedback = next;
+      $$("[data-vote]", el).forEach((x) => x.classList.toggle("on", +x.dataset.vote === next));
+      toast(next === 0 ? "Vote cleared" : s.active ? "Thanks: future clips will lean this way" : `Thanks: learning starts after ${s.min_votes} votes (${s.likes + s.dislikes} so far)`);
+    } catch (e) { toast(e.message); }
+  }));
   $('[data-act="copy"]', el).addEventListener("click", () => {
     navigator.clipboard.writeText([c.title, c.hook, (c.hashtags || []).join(" ")].filter(Boolean).join("\n\n"));
     toast("Title, caption and hashtags copied");
@@ -644,8 +677,98 @@ function openEditor(job, name) {
   segmented("ed_layout", c.layout);
   segmented("ed_caption_style", c.caption_style);
   $("#edCapField").hidden = job.options?.transcribe === false;
+  $("#edCapText").hidden = job.options?.transcribe === false;
+  loadCaptionLines(job, c);
   paintTrim();
   ed.dlg.showModal();
+}
+
+// ---- caption text: one editable line per phrase (absolute source times)
+function captionLines(words) {
+  const lines = [];
+  let cur = [];
+  for (const w of words) {
+    if (cur.length && (cur.length >= 7 || w[0] - cur[cur.length - 1][1] > 0.8)) { lines.push(cur); cur = []; }
+    cur.push(w);
+    if (/[.!?…]["'”’)\]]*$/.test(w[2])) { lines.push(cur); cur = []; }
+  }
+  if (cur.length) lines.push(cur);
+  return lines.map((ws) => ({ start: ws[0][0], end: ws[ws.length - 1][1], text: ws.map((w) => w[2]).join(" ").replace(/ (?=[-'’,.!?%])/g, "") }));
+}
+async function loadCaptionLines(job, c) {
+  const box = $("#edLines");
+  box.innerHTML = `<p class="hint">Loading captions…</p>`;
+  let words = c.words;
+  if (!words) {  // clips made before caption editing existed: use the job transcript
+    try {
+      const segs = await (await fetch(`/data/jobs/${job.id}/transcript.json`)).json();
+      words = segs.flatMap((s) => (s.words || []).map((w) => [w.start, w.end, w.text])).filter((w) => w[1] > c.start && w[0] < c.end);
+    } catch { words = []; }
+  }
+  ed.lines = captionLines(words);
+  if (!ed.lines.length) { box.innerHTML = `<p class="hint">No speech in this clip.</p>`; return; }
+  box.innerHTML = ed.lines.map((l, i) => `<div class="cap-line" data-i="${i}"><button type="button" title="Jump here">${fmt(l.start)}</button><input type="text" value="${esc(l.text)}" spellcheck="true" /></div>`).join("");
+  $$(".cap-line", box).forEach((row) => {
+    const l = ed.lines[+row.dataset.i], input = $("input", row);
+    $("button", row).addEventListener("click", () => { ed.video.currentTime = l.start - ed.s0; paintHead(); });
+    input.addEventListener("input", () => input.classList.toggle("changed", input.value.trim() !== l.text));
+    input.addEventListener("focus", () => { ed.video.currentTime = l.start - ed.s0; paintHead(); });
+  });
+  paintLines();
+}
+function paintLines() {
+  const now = ed.s0 + (ed.video.currentTime || 0);
+  $$("#edLines .cap-line").forEach((row) => {
+    const l = ed.lines?.[+row.dataset.i];
+    if (!l) return;
+    row.classList.toggle("now", now >= l.start && now < l.end + 0.3);
+    row.classList.toggle("out", l.end <= ed.start || l.start >= ed.end);
+  });
+}
+function captionEdits() {
+  return $$("#edLines .cap-line").map((row) => {
+    const l = ed.lines[+row.dataset.i], text = $("input", row).value.trim().replace(/\s+/g, " ");
+    return text === l.text ? null : { start: +l.start.toFixed(2), end: +l.end.toFixed(2), text };
+  }).filter(Boolean);
+}
+
+// ---- copyright marks on the trim bar
+function paintBands() {
+  const box = $("#trimBands"), legend = $("#edCrLegend"), cr = ed.clip?.copyright;
+  const span = (cls, a, b, title) => {
+    a = clamp(a, ed.w0, ed.w1); b = clamp(b, ed.w0, ed.w1);
+    return b > a ? `<span class="${cls}" style="left:${pct(a)};width:calc(${pct(b)} - ${pct(a)})" title="${esc(title)}"></span>` : "";
+  };
+  if (!cr || cr.status !== "done" || !cr.ranges) {
+    box.innerHTML = "";
+    legend.innerHTML = cr?.status === "checking" ? "© Copyright check running…" : cr?.status === "failed" ? "© Copyright check failed for this clip." : "";
+    return;
+  }
+  const r = cr.ranges, [c0, c1] = r.checked;
+  box.innerHTML = [
+    span("unchecked", ed.w0, c0, "Not checked yet: re-render to check"), span("unchecked", c1, ed.w1, "Not checked yet: re-render to check"),
+    ...r.music.map(([a, b]) => span("music", a, b, `Background music ${fmt(a)}–${fmt(b)}`)),
+    ...r.songs.map(([a, b, n]) => span("song", a, b, `Song: ${n}`)),
+    ...r.visual.map(([a, b, n]) => span("visual", a, b, n)),
+  ].join("");
+  legend.innerHTML = [
+    r.songs.length && `<span><i class="song"></i>Identified song</span>`,
+    r.music.length && `<span><i class="music"></i>Background music</span>`,
+    r.visual.length && `<span><i class="visual"></i>Watermark / logo</span>`,
+    (c0 > ed.w0 + 0.5 || c1 < ed.w1 - 0.5) && `<span><i class="unchecked"></i>Not checked (outside the last render)</span>`,
+  ].filter(Boolean).join("") || `<span>© No songs, music or logos found in the checked part</span>`;
+}
+function paintCrWarning() {
+  const r = ed.clip?.copyright?.ranges, warn = $("#edCrWarn");
+  if (!r) { warn.hidden = true; return; }
+  const hit = (a, b) => a < ed.end && b > ed.start;
+  const songs = r.songs.filter(([a, b]) => hit(a, b)), vis = r.visual.filter(([a, b]) => hit(a, b));
+  const msgs = [
+    ...songs.map(([a, b, n]) => `“${n}” plays at ${fmt(a)}–${fmt(b)}: trim it out or it will likely be claimed.`),
+    ...vis.map(([, , n]) => `${n} is on screen in this selection.`),
+  ];
+  warn.hidden = !msgs.length;
+  warn.innerHTML = msgs.map(esc).join("<br>");
 }
 const pct = (t) => `${((t - ed.w0) / (ed.w1 - ed.w0)) * 100}%`;
 function paintTrim() {
@@ -659,6 +782,9 @@ function paintTrim() {
   $("#trimMin").textContent = fmt(ed.w0);
   $("#trimMax").textContent = fmt(ed.w1);
   paintHead();
+  paintBands();
+  paintCrWarning();
+  paintLines();
 }
 function paintHead() { $("#trimHead").style.left = pct(clamp(ed.s0 + ed.video.currentTime, ed.w0, ed.w1)); }
 const timeAt = (x) => { const r = ed.track.getBoundingClientRect(); return ed.w0 + clamp((x - r.left) / r.width, 0, 1) * (ed.w1 - ed.w0); };
@@ -679,6 +805,7 @@ ed.track.addEventListener("pointerdown", (e) => {
 });
 ed.video.addEventListener("timeupdate", () => {
   paintHead();
+  paintLines();
   if (ed.playingSel && ed.s0 + ed.video.currentTime >= ed.end) { ed.video.pause(); ed.playingSel = false; }
 });
 $("#edPlay").addEventListener("click", () => { ed.video.currentTime = ed.start - ed.s0; ed.playingSel = true; ed.video.play(); });
@@ -691,7 +818,7 @@ $("#edSave").addEventListener("click", async () => {
   try {
     await api(`/api/jobs/${ed.job.id}/clips/${ed.clip.name}`, {
       method: "POST",
-      body: { start: +ed.start.toFixed(2), end: +ed.end.toFixed(2), title: $("#edTitle").value.trim() || null, layout: segmented("ed_layout"), caption_style: ed.job.options?.transcribe === false ? null : segmented("ed_caption_style") },
+      body: { start: +ed.start.toFixed(2), end: +ed.end.toFixed(2), title: $("#edTitle").value.trim() || null, layout: segmented("ed_layout"), caption_style: ed.job.options?.transcribe === false ? null : segmented("ed_caption_style"), caption_edits: captionEdits() },
     });
     closeEditor();
     toast("Re-rendering clip…");
@@ -719,7 +846,8 @@ function fillSettings() {
   $("#setGeminiFallback").value = s.gemini_fallback_model || "";
   $("#setModel").value = s.anthropic_model || "";
   $("#setWatch").checked = !!s.ai_watch_video;
-  ["#setGeminiKey", "#setGroqKey", "#setKey"].forEach((id) => ($(id).value = ""));
+  ["#setGeminiKey", "#setGroqKey", "#setKey", "#setVisionKey"].forEach((id) => ($(id).value = ""));
+  $("#setVisionHint").textContent = hint(s.has_google_vision_key, s.google_vision_key_hint);
   $("#setGeminiHint").textContent = hint(s.has_gemini_key, s.gemini_key_hint);
   $("#setGroqHint").textContent = hint(s.has_groq_key, s.groq_key_hint);
   $("#setKeyHint").textContent = hint(s.has_anthropic_key, s.anthropic_key_hint);
@@ -727,6 +855,7 @@ function fillSettings() {
   $("#setWhisper").value = s.whisper_model || "small";
   $("#setDevice").value = s.whisper_device || "auto";
   $("#setMusic").checked = !!s.remove_music;
+  $("#setAutoCr").checked = s.auto_copyright !== false;
   $("#setQuality").value = String(s.video_quality || 2160);
   $("#saveState").textContent = "";
 }
@@ -743,10 +872,13 @@ $("#settingsForm").addEventListener("submit", async (e) => {
     whisper_model: $("#setWhisper").value,
     whisper_device: $("#setDevice").value,
     remove_music: $("#setMusic").checked,
+    auto_copyright: $("#setAutoCr").checked,
     video_quality: +$("#setQuality").value,
   };
   const anthropic = $("#setKey").value.trim();
   if (anthropic) body.anthropic_api_key = anthropic;
+  const vision = $("#setVisionKey").value.trim();
+  if (vision) body.google_vision_api_key = vision;
   for (const [id, field] of [["#setGeminiKey", "gemini_api_keys"], ["#setGroqKey", "groq_api_keys"]]) {
     const list = $(id).value.split(/[\s,]+/).map((k) => k.trim()).filter(Boolean);
     if (list.length) body[field] = list;
@@ -1111,7 +1243,7 @@ function crWatch(id) {
     $(".bar > div", prog).style.width = `${Math.round(job.progress * 100)}%`;
     if (["queued", "running"].includes(job.status)) return;
     clearInterval(crPoll); crPoll = null; prog.hidden = true;
-    if (job.status === "done") renderCopyright(job.result);
+    if (job.status === "done") renderCopyright(job.result, job.id);
     else { $("#crError").textContent = job.error || "The check failed."; $("#crError").hidden = false; }
   };
   tick();
@@ -1135,22 +1267,91 @@ function musicTimeline(r) {
     ${ranges.length ? `<div class="music-list">${ranges.map(([a, b]) => `<span class="pill warn">${fmt(a)} – ${fmt(b)}</span>`).join("")}</div>` : ""}
   </div>`;
 }
-function renderCopyright(r) {
+function crVisual(r) {
+  const v = r.visual;
+  if (!v) return "";
+  const rows = [
+    ...(v.text || []).map((f) => [f.level, { platform: "Watermark", stream: "Livestream", handle: "Creator tag", brand: "Broadcaster", scoreboard: "Scoreboard", text: "On-screen text" }[f.kind] || "Text", `“${f.text}”`, `${f.where} · ${f.span}`]),
+    ...(v.logos || []).map((l) => ["warn", "Fixed logo", "Logo / watermark shape", l.where]),
+    ...(v.cinema ? [["warn", "Framing", `Widescreen ${v.cinema.aspect}:1 with black bars`, "whole video"]] : []),
+  ];
+  const web = v.web && v.web.checked ? v.web : null;
+  const checks = r.checks || {};
+  const chip = (ok, label) => `<span class="pill ${ok ? "ok" : ""}">${ok ? "✓" : "–"} ${label}</span>`;
+  return `<div class="card" style="margin-bottom:14px">
+    <div class="card-head"><h3>Picture</h3><span class="sub">${rows.length ? `${rows.length} finding${rows.length > 1 ? "s" : ""}` : "nothing found"}</span></div>
+    <div class="signals" style="margin-bottom:${rows.length || web ? 12 : 0}px">${chip(checks.music, "Music")}${chip(checks.songs, "Song ID")}${chip(checks.logos, "Logos")}${chip(checks.ocr, "On-screen text")}${chip(checks.web, "Web search")}</div>
+    ${rows.length ? `<table class="table"><thead><tr><th>Type</th><th>Found</th><th>Where</th></tr></thead><tbody>${rows.map(([lv, t, what, where]) => `<tr><td><span class="pill ${lv === "bad" ? "bad" : "warn"}">${esc(t)}</span></td><td>${esc(what)}</td><td class="muted">${esc(where)}</td></tr>`).join("")}</tbody></table>` : ""}
+    ${web && web.pages.length ? `<div class="card-head" style="margin-top:14px"><h3>Found online</h3><span class="sub">${web.entities.length ? esc(web.entities.slice(0, 3).join(", ")) : ""}</span></div>
+      <div class="evidence">${web.pages.slice(0, 6).map((p) => `<div class="${p.full ? "bad" : "warn"}"><i></i><span>${p.full ? "Exact match" : "Similar"} at ${esc(p.at)}: <a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.title || p.url)}</a></span></div>`).join("")}</div>` : ""}
+  </div>`;
+}
+function crFix(r, jobId) {
+  if (!jobId || !r.fixable) return "";
+  const hasSong = (r.music || []).length > 0;
+  return `<div class="card" style="margin-bottom:14px" id="crFixCard">
+    <div class="card-head"><h3>Fix it</h3><span class="sub">${fmt(r.music_seconds)} of music</span></div>
+    <p style="margin:0 0 12px;line-height:1.5">${hasSong ? "Strip the identified music" : "Strip the background music"} from the flagged parts and keep the voice. The picture isn't re-encoded, so quality stays the same.</p>
+    <button class="btn ${hasSong ? "primary" : ""}" id="crFixBtn">Remove music, keep voice</button>
+    <div id="crFixProg" hidden style="margin-top:12px"><div class="progress-top"><span class="stage">Starting…</span><span class="pct">0%</span></div><div class="bar"><div></div></div></div>
+    <div id="crFixOut"></div>
+  </div>`;
+}
+function crRunFix(checkId) {
+  const btn = $("#crFixBtn"), prog = $("#crFixProg"), out = $("#crFixOut");
+  btn.disabled = true; prog.hidden = false; out.innerHTML = "";
+  api(`/api/tools/copyright/${checkId}/fix`, { method: "POST" }).then((job) => {
+    const t = setInterval(async () => {
+      let j;
+      try { j = await api(`/api/jobs/${job.id}`); } catch { return; }
+      $(".stage", prog).textContent = j.status === "queued" ? "Waiting for the previous job to finish" : j.stage;
+      $(".pct", prog).textContent = `${Math.round(j.progress * 100)}%`;
+      $(".bar > div", prog).style.width = `${Math.round(j.progress * 100)}%`;
+      if (["queued", "running"].includes(j.status)) return;
+      clearInterval(t); prog.hidden = true; btn.disabled = false;
+      if (j.status !== "done") { out.innerHTML = `<p class="form-error">${esc(j.error || "Music removal failed.")}</p>`; return; }
+      const f = encodeURIComponent(j.result.files.video), after = `/data/jobs/${j.id}/${f}`, before = j.result.original;
+      out.innerHTML = `${before ? `<div class="seg ab-toggle" id="crAB"><button type="button" data-v="before">Before</button><button type="button" data-v="after" class="on">After (music removed)</button></div>` : ""}
+        <video class="tool-video" id="crFixVideo" src="${after}" controls preload="metadata" playsinline style="margin-top:12px"></video>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><a class="btn sm primary" href="/data/jobs/${j.id}/${f}?download=1">Download (${j.result.size_mb} MB)</a><span class="hint" style="align-self:center">Upload this file to the check above to confirm it's clean.</span></div>`;
+      if (before) abToggle($("#crAB"), $("#crFixVideo"), { before, after });
+    }, 1200);
+  }).catch((e) => { prog.hidden = true; btn.disabled = false; out.innerHTML = `<p class="form-error">${esc(e.message)}</p>`; });
+}
+// Before/after: swap the video source at the same moment, keeping play/pause state.
+// Shortcut: press B while the video is focused.
+function abToggle(seg, video, srcs) {
+  const show = (which) => {
+    const url = srcs[which];
+    if (!url || video.getAttribute("src") === url) return;
+    const t = video.currentTime, playing = !video.paused;
+    video.src = url;
+    video.addEventListener("loadedmetadata", () => { video.currentTime = t; if (playing) video.play(); }, { once: true });
+    $$("button", seg).forEach((b) => b.classList.toggle("on", b.dataset.v === which));
+  };
+  seg.addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) show(b.dataset.v); });
+  video.addEventListener("keydown", (e) => { if (e.key.toLowerCase() === "b") show(video.getAttribute("src") === srcs.after ? "before" : "after"); });
+}
+function renderCopyright(r, jobId) {
+  const isFile = r.source === "file";
   $("#crResult").innerHTML = `
     <div class="card preview" style="margin-bottom:14px">
       <div class="thumb"><img src="${esc(r.thumbnail || "")}" alt="" /></div>
-      <div><h2>${esc(r.title)}</h2><div class="meta">${esc(r.channel)}${r.channel_verified ? " ✓" : ""}${r.source === "file" && r.duration ? ` · ${fmt(r.duration)}` : ""}</div>
+      <div><h2>${esc(r.title)}</h2><div class="meta">${esc(r.channel)}${r.channel_verified ? " ✓" : ""}${isFile && r.duration ? ` · ${fmt(r.duration)}` : ""}</div>
         <div class="signals"><span class="pill ${r.creative_commons || r.declared_free ? "ok" : ""}">${esc(r.declared_free && !r.creative_commons ? "Creator-declared free" : r.license)}</span>${(r.categories || []).map((c) => `<span class="pill">${esc(c)}</span>`).join("")}</div></div>
     </div>
     <div class="verdict ${r.level}"><div class="big">${CR_ICON[r.level]}</div><div><h2>${esc(r.verdict)}</h2><p>${esc(r.summary)}</p></div></div>
+    ${isFile ? crFix(r, jobId) : ""}
     <div class="card" style="margin-bottom:14px"><div class="card-head"><h3>Evidence</h3></div>
       <div class="evidence">${r.evidence.map((e) => `<div class="${e.level}"><i></i><span>${esc(e.text)}</span></div>`).join("")}</div></div>
-    ${r.source === "file" ? musicTimeline(r) : ""}
-    ${r.music.length ? `<div class="card" style="margin-bottom:14px"><div class="card-head"><h3>Music identified by YouTube</h3><span class="sub">${r.music.length} song${r.music.length > 1 ? "s" : ""}</span></div>
-      <table class="table"><thead><tr><th>Song</th><th>Artist</th><th>Album</th></tr></thead><tbody>${r.music.map((m) => `<tr><td>${esc(m.song)}</td><td>${esc(m.artist || "–")}</td><td class="muted">${esc(m.album || "–")}</td></tr>`).join("")}</tbody></table></div>` : ""}
+    ${r.music.length ? `<div class="card" style="margin-bottom:14px"><div class="card-head"><h3>${isFile ? "Songs identified" : "Music identified by YouTube"}</h3><span class="sub">${r.music.length} song${r.music.length > 1 ? "s" : ""}</span></div>
+      <table class="table"><thead><tr><th>Song</th><th>Artist</th>${isFile ? "<th>Label</th><th>Where</th>" : "<th>Album</th>"}</tr></thead><tbody>${r.music.map((m) => `<tr><td>${m.url ? `<a href="${esc(m.url)}" target="_blank" rel="noopener">${esc(m.song)}</a>` : esc(m.song)}</td><td>${esc(m.artist || "–")}</td>${isFile ? `<td class="muted">${esc(m.label || "–")}</td><td class="muted">${esc(m.at || "")}</td>` : `<td class="muted">${esc(m.album || "–")}</td>`}</tr>`).join("")}</tbody></table></div>` : ""}
+    ${isFile ? musicTimeline(r) : ""}
+    ${isFile ? crVisual(r) : ""}
     ${r.attribution ? `<div class="card" style="margin-bottom:14px"><div class="card-head"><h3>Credit line</h3><button class="btn sm" id="crCopy">Copy</button></div><p class="mono" style="margin:0;line-height:1.6">${esc(r.attribution)}</p></div>` : ""}
     <p class="hint" style="line-height:1.5">${esc(r.disclaimer)}</p>`;
   $("#crCopy")?.addEventListener("click", () => { navigator.clipboard.writeText(r.attribution); toast("Credit line copied"); });
+  $("#crFixBtn")?.addEventListener("click", () => crRunFix(jobId));
 }
 
 // ================================================================ home (landing)

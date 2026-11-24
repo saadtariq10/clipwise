@@ -37,6 +37,18 @@ _model_key: tuple | None = None
 _lock = threading.Lock()
 
 
+def _model_path(name: str) -> str:
+    """Local folder of a downloaded model. Loading by name asks HuggingFace for the latest
+    revision every time, which stalls for minutes on a slow or offline connection; the
+    network is only used when the model isn't on disk yet."""
+    from faster_whisper.utils import download_model
+    try:
+        return download_model(name, local_files_only=True)
+    except Exception:
+        log.info("Whisper model '%s' isn't downloaded yet: downloading it now", name)
+        return download_model(name)
+
+
 def _get_model(name: str, device: str):
     global _model, _model_key
     from faster_whisper import WhisperModel
@@ -47,9 +59,10 @@ def _get_model(name: str, device: str):
         if _model is None or _model_key != (name, device):
             t0 = time.time()
             log.info("loading Whisper model '%s' (setting: %s); first use downloads it", name, device)
+            path = _model_path(name)
             if device in ("auto", "cuda"):
                 try:
-                    _model = WhisperModel(name, device="cuda", compute_type="float16")
+                    _model = WhisperModel(path, device="cuda", compute_type="float16")
                     _model_key = (name, device)
                     log.info("Whisper '%s' ready on NVIDIA GPU (CUDA) in %.1fs", name, time.time() - t0)
                     return _model
@@ -61,7 +74,7 @@ def _get_model(name: str, device: str):
             # Measured: 4 threads beat 8/10 (extra threads land on slow efficiency cores
             # and fight with downloads/ffmpeg for the CPU).
             threads = min(4, os.cpu_count() or 4)
-            _model = WhisperModel(name, device="cpu", compute_type="int8", cpu_threads=threads)
+            _model = WhisperModel(path, device="cpu", compute_type="int8", cpu_threads=threads)
             _model_key = (name, device)
             log.info("Whisper '%s' ready on CPU (%d threads) in %.1fs", name, threads, time.time() - t0)
         return _model

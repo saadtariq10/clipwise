@@ -58,7 +58,8 @@ def main() -> None:
         *[a for t in tools for a in ("--add-binary", f"{t}{sep}bin")],
         "--collect-submodules", "uvicorn",
         *[a for pkg in ("faster_whisper", "ctranslate2", "onnxruntime", "av",
-                        "yt_dlp", "yt_dlp_ejs", "tokenizers")
+                        "yt_dlp", "yt_dlp_ejs", "tokenizers",
+                        "shazamio", "shazamio_core", "rapidocr_onnxruntime", "cv2")
           for a in ("--collect-all", pkg)],
     ]
     PyInstaller.__main__.run(args)
