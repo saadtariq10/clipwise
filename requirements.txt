@@ -1,0 +1,9 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+yt-dlp[default]>=2025.11.12
+deno>=2.0              # JS runtime yt-dlp needs for YouTube
+faster-whisper>=1.1    # local speech-to-text (no API needed)
+static-ffmpeg>=2.7     # auto-downloads ffmpeg if not installed
+numpy>=1.26
+anthropic>=0.70        # optional AI ranking (only used if an API key is set)
+requests>=2.31           # Gemini + Groq APIs (both optional)

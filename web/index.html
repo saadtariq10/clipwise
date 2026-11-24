@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Clipwise</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%237c6cf0'/><path d='M12 9.5l10 6.5-10 6.5z' fill='white'/></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="app">
+  <!-- ============================================================ sidebar -->
+  <aside class="sidebar">
+    <a class="brand" href="#/home"><span class="brand-mark"><svg viewBox="0 0 24 24"><path d="M8 5.5l11 6.5-11 6.5z"/></svg></span><span class="brand-name">Clipwise</span></a>
+    <nav class="nav">
+      <a href="#/home" data-nav="home"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span class="label">Home</span></a>
+      <div class="nav-label">Create</div>
+      <a href="#/new" data-nav="new"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg><span class="label">From YouTube</span></a>
+      <a href="#/live" data-nav="live"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8a6 6 0 0 1 0 8.4M7.8 16.2a6 6 0 0 1 0-8.4M19 5a10 10 0 0 1 0 14M5 19A10 10 0 0 1 5 5"/></svg><span class="label">Live monitor</span><span class="count live" id="navLive" hidden></span></a>
+      <a href="#/upload" data-nav="upload"><svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L7 9m5-5l5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg><span class="label">Upload video</span></a>
+      <div class="nav-label">Tools</div>
+      <a href="#/transcribe" data-nav="transcribe"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span class="label">Transcribe</span></a>
+      <a href="#/enhance" data-nav="enhance"><svg viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 17l.8 2.2L22 20l-2.2.8L19 23l-.8-2.2L16 20l2.2-.8z"/></svg><span class="label">Enhance video</span></a>
+      <a href="#/copyright" data-nav="copyright"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg><span class="label">Copyright check</span></a>
+      <div class="nav-label">Workspace</div>
+      <a href="#/library" data-nav="library"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v5"/></svg><span class="label">Library</span><span class="count" id="navJobs"></span></a>
+      <a href="#/settings" data-nav="settings"><svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg><span class="label">Settings</span></a>
+      <a href="#/system" data-nav="system"><svg viewBox="0 0 24 24"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg><span class="label">System &amp; usage</span></a>
+    </nav>
+    <div class="side-foot">
+      <div class="kv"><span>AI review</span><b id="sideAI">…</b></div>
+      <div class="kv"><span>Transcription</span><b id="sideTx">…</b></div>
+      <div class="kv"><span>Queue</span><b id="sideQueue">…</b></div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="landing-nav">
+      <a class="brand" href="#/home" style="padding:0"><span class="brand-mark"><svg viewBox="0 0 24 24"><path d="M8 5.5l11 6.5-11 6.5z"/></svg></span><span class="brand-name">Clipwise</span></a>
+      <nav class="links"><a href="#how">How it works</a><a href="#features">Features</a><a href="#/library">Library</a><a href="#/settings">Settings</a></nav>
+      <a class="btn sm" href="#/new">Open app</a>
+    </header>
+    <div class="page">
+
+    <!-- ============================================================ HOME (landing) -->
+    <section data-view="home" class="home" hidden>
+      <div class="aurora"><span></span><span></span><span></span></div>
+      <div class="grid-bg"></div>
+
+      <div class="hero">
+        <div class="reveal"><span class="eyebrow"><b>New</b> Live monitoring · music-proof captions · AI titles</span></div>
+        <h1 class="reveal" style="--delay:.08s">Find the moments<br/><span class="gradient-text">worth sharing.</span></h1>
+        <p class="lead reveal" style="--delay:.16s">Clipwise reads the audience, listens to the room and understands every line, then cuts captioned clips ready for Shorts and your channel. All on your own computer.</p>
+
+        <div class="launcher reveal" style="--delay:.24s">
+          <div class="launcher-tabs" id="homeTabs">
+            <button class="on" data-src="new"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>YouTube video</button>
+            <button data-src="live"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8a6 6 0 0 1 0 8.4M7.8 16.2a6 6 0 0 1 0-8.4M19 5a10 10 0 0 1 0 14M5 19A10 10 0 0 1 5 5"/></svg>Live stream</button>
+            <button data-src="upload"><svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L7 9m5-5l5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>Upload file</button>
+          </div>
+          <form class="launch-box" id="homeForm" autocomplete="off">
+            <span id="homeIcon"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg></span>
+            <input id="homeInput" type="text" placeholder="Paste a YouTube link…" />
+            <button class="btn cta" type="submit" id="homeGo"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg><span>Find moments</span></button>
+          </form>
+          <p class="launch-error" id="homeError" hidden></p>
+          <div class="launch-help"><span id="homeHint">Works with videos, finished streams and Shorts.</span><span>Free · runs locally · no account</span></div>
+        </div>
+      </div>
+
+      <div class="showcase reveal" id="showcase" style="--delay:.3s">
+        <div class="mock">
+          <div class="mock-head"><span class="dots"><i></i><i></i><i></i></span><span class="title">Moment map · 34:50 stream · 5 clips found</span></div>
+          <div class="mock-bars" id="mockBars"></div>
+          <div class="mock-axis"><span>0:00</span><span>8:14</span><span>18:56</span><span>34:50</span></div>
+          <div class="float-chip c1"><span class="ic"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg></span>8:14 cited in 7 comments</div>
+          <div class="float-chip c2"><span class="ic"><svg viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 17l.8 2.2L22 20l-2.2.8L19 23l-.8-2.2L16 20l2.2-.8z"/></svg></span>AI: “strong hook, clear payoff”</div>
+          <div class="float-chip c3"><span class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 10.5a2 2 0 1 0 0 3M17 10.5a2 2 0 1 0 0 3"/></svg></span>Captioned · 9:16 · 47s</div>
+        </div>
+      </div>
+
+      <div class="stats reveal" id="homeStats">
+        <div><b data-count="clips">0</b><small>clips created</small></div>
+        <div><b data-count="jobs">0</b><small>videos processed</small></div>
+        <div><b data-count="avg">–</b><small>average per video</small></div>
+        <div><b>100%</b><small>local &amp; private</small></div>
+      </div>
+
+      <section class="section" id="how">
+        <div class="section-head reveal"><span class="kicker">How it works</span><h2>From a long video to ready-to-post clips</h2><p>Four steps, fully automatic. You review, tweak and download.</p></div>
+        <div class="steps4">
+          <div class="s reveal"><div class="num" data-n="1"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg></div><h4>Paste or upload</h4><p>A YouTube video, a live stream, or a file from your computer.</p></div>
+          <div class="s reveal" style="--delay:.1s"><div class="num" data-n="2"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div><h4>Read the audience</h4><p>Chat spikes, timestamped comments, most-replayed parts and audio energy.</p></div>
+          <div class="s reveal" style="--delay:.2s"><div class="num" data-n="3"><svg viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 17l.8 2.2L22 20l-2.2.8L19 23l-.8-2.2L16 20l2.2-.8z"/></svg></div><h4>Judge the content</h4><p>Hook, emotion, payoff. Then AI re-ranks the best and writes titles.</p></div>
+          <div class="s reveal" style="--delay:.3s"><div class="num" data-n="4"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4L8.1 15.9M14.5 14.5L20 20M8.1 8.1L12 12"/></svg></div><h4>Cut &amp; caption</h4><p>Vertical or wide clips with word-by-word captions, SRT and transcript.</p></div>
+        </div>
+      </section>
+
+      <section class="section" id="features">
+        <div class="section-head reveal"><span class="kicker">Features</span><h2>Everything a clipping team does, in one app</h2><p>Built for creators and editors who'd rather post than scrub through hours of footage.</p></div>
+        <div class="features">
+          <div class="feature reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg></div><h4>Audience-driven picks</h4><p>Moments viewers actually reacted to: chat bursts, comments like “8:14 😭”, and YouTube's most-replayed data.</p></div>
+          <div class="feature reveal" style="--delay:.08s"><div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8a6 6 0 0 1 0 8.4M7.8 16.2a6 6 0 0 1 0-8.4M19 5a10 10 0 0 1 0 14M5 19A10 10 0 0 1 5 5"/></svg></div><h4>Live monitor</h4><p>Clip a stream while it's on air. Clipwise checks for new moments every few minutes until it ends.</p></div>
+          <div class="feature reveal" style="--delay:.16s"><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 17l.8 2.2L22 20l-2.2.8L19 23l-.8-2.2L16 20l2.2-.8z"/></svg></div><h4>AI review &amp; titles</h4><p>Gemini or Groq re-rank candidates and write titles, captions and hashtags, with automatic fallbacks.</p></div>
+          <div class="feature reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div><h4>Music-proof captions</h4><p>Strips background music from the voice before transcribing, so narration over music stays accurate.</p></div>
+          <div class="feature reveal" style="--delay:.08s"><div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 10.5a2 2 0 1 0 0 3M17 10.5a2 2 0 1 0 0 3"/></svg></div><h4>Captions that pop</h4><p>Word-by-word highlighted captions burned in, plus SRT files and full transcripts for every clip.</p></div>
+          <div class="feature reveal" style="--delay:.16s"><div class="ic"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4L8.1 15.9M14.5 14.5L20 20M8.1 8.1L12 12"/></svg></div><h4>Built-in editor</h4><p>Drag a clip's start and end, change the format or captions, and re-render in seconds.</p></div>
+        </div>
+      </section>
+
+      <section class="section" id="recentWrap" hidden>
+        <div class="section-head reveal"><span class="kicker">Your library</span><h2>Recently created</h2></div>
+        <div class="recent" id="recentClips"></div>
+      </section>
+
+      <div class="final-cta reveal">
+        <div class="box">
+          <h2>Your next clip is already in there.</h2>
+          <p>Paste a link and let Clipwise find it.</p>
+          <a class="btn cta" href="#/home" id="ctaTop"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg><span>Start clipping</span></a>
+        </div>
+      </div>
+      <div class="home-foot">Clipwise · runs entirely on your computer · only clip content you have the rights to use</div>
+    </section>
+
+    <!-- ============================================================ NEW (YouTube) -->
+    <section data-view="new">
+      <div class="page-head"><div><h1>Create clips from YouTube</h1><p>Paste a video or a finished stream. Clipwise finds its strongest moments and exports captioned clips.</p></div></div>
+      <div class="grid-2">
+        <div class="stack">
+          <div class="card">
+            <form class="source-bar" id="urlForm" autocomplete="off">
+              <div class="input-wrap"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
+                <input id="urlInput" type="url" placeholder="https://www.youtube.com/watch?v=…" required /></div>
+              <button class="btn primary" type="submit" id="probeBtn">Load</button>
+            </form>
+            <p class="form-error" id="urlError" hidden></p>
+          </div>
+          <div class="preview-slot"></div>
+          <div class="card">
+            <div class="card-head"><h3>How moments are chosen</h3></div>
+            <div class="kv-list">
+              <div><span>Audience</span><b>Chat activity · timestamped comments · most replayed</b></div>
+              <div><span>Audio</span><b>Energy and sudden reactions</b></div>
+              <div><span>Speech</span><b>Hook · emotion · payoff · quotable lines</b></div>
+              <div><span>AI review</span><b>Re-ranks candidates and writes titles</b></div>
+            </div>
+          </div>
+        </div>
+        <div class="options-slot"></div>
+      </div>
+    </section>
+
+    <!-- ============================================================ LIVE -->
+    <section data-view="live" hidden>
+      <div class="page-head"><div><h1>Live monitor</h1><p>Clip a stream while it's on air: analyse from the start up to now, then keep checking for new moments.</p></div></div>
+      <div class="grid-2">
+        <div class="stack">
+          <div class="card">
+            <form class="source-bar" id="liveForm" autocomplete="off">
+              <div class="input-wrap"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8a6 6 0 0 1 0 8.4M7.8 16.2a6 6 0 0 1 0-8.4"/></svg>
+                <input id="liveInput" type="url" placeholder="Live stream link, or a channel's /live page" required /></div>
+              <button class="btn primary" type="submit" id="liveProbeBtn">Load</button>
+            </form>
+            <p class="form-error" id="liveError" hidden></p>
+          </div>
+          <div class="preview-slot"></div>
+          <div class="card">
+            <div class="card-head"><h3>Monitors</h3><span class="sub" id="monCount"></span></div>
+            <div id="monitorList"></div>
+          </div>
+        </div>
+        <div class="options-slot"></div>
+      </div>
+    </section>
+
+    <!-- ============================================================ UPLOAD -->
+    <section data-view="upload" hidden>
+      <div class="page-head"><div><h1>Upload a video</h1><p>Use a file from this computer, such as a downloaded video or a stream recording.</p></div></div>
+      <div class="grid-2">
+        <div class="stack">
+          <label class="dropzone" id="dropZone">
+            <input type="file" id="fileInput" accept="video/*,.mkv,.ts,.flv" hidden />
+            <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L7 9m5-5l5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+            <b id="dropTitle">Drop a video file, or click to browse</b>
+            <span class="muted small">MP4 · MOV · MKV · WEBM · AVI</span>
+            <div class="bar" hidden><div id="uploadFill"></div></div>
+          </label>
+          <p class="form-error" id="uploadError" hidden></p>
+          <div class="preview-slot"></div>
+        </div>
+        <div class="options-slot"></div>
+      </div>
+    </section>
+
+
+    <!-- ============================================================ TOOL: TRANSCRIBE -->
+    <section data-view="transcribe" hidden>
+      <div class="page-head"><div><h1>Transcribe</h1><p>Accurate transcripts and subtitles, even with background music. Separate from clip creation.</p></div></div>
+      <div class="grid-2">
+        <div class="stack">
+          <div class="card">
+            <div class="launcher-tabs tool-tabs" data-tool="transcribe"><button class="on" data-src="youtube">YouTube link</button><button data-src="file">Upload file</button></div>
+            <form class="source-bar tool-url" autocomplete="off">
+              <div class="input-wrap"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
+                <input type="url" placeholder="https://www.youtube.com/watch?v=…" required /></div>
+              <button class="btn primary" type="submit">Load</button>
+            </form>
+            <label class="dropzone tool-drop" hidden style="padding:26px 16px">
+              <input type="file" accept="video/*,audio/*,.mkv,.ts,.flv,.mp3,.wav,.m4a" hidden />
+              <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L7 9m5-5l5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+              <b class="drop-title">Drop a file, or click to browse</b>
+              <div class="bar" hidden><div></div></div>
+            </label>
+            <p class="form-error tool-error" hidden></p>
+          </div>
+          <div class="tool-preview"></div>
+          <div class="card tool-progress" hidden>
+            <div class="progress-top"><span class="stage">Starting…</span><span class="pct">0%</span></div>
+            <div class="bar"><div></div></div>
+            <div class="stat-row" style="margin-top:14px"><div class="stat"><small>Elapsed</small><b class="t-elapsed">–</b></div><div class="stat"><small>Status</small><b class="t-status">Queued</b></div><div class="stat"><small>Job</small><b class="t-job mono" style="font-size:12px">–</b></div></div>
+            <p class="tool-dl muted small" hidden style="margin:12px 0 0"></p>
+            <div class="note bad tool-failed" hidden style="margin-top:12px"></div>
+          </div>
+          <div class="tool-result" hidden></div>
+        </div>
+        <div class="card options">
+          <div class="card-head"><h3>Transcription settings</h3></div>
+          <div class="fields">
+            <label class="switch"><input type="checkbox" id="trMusic" checked /><span class="track"></span><span><b>Remove background music</b><small>Isolates the voice first. Best for narration, vlogs or talk over music. Adds processing time.</small></span></label>
+            <div class="field"><label>Engine</label><div class="seg" data-name="tr_engine"><button type="button" data-value="local" class="on">Local (private)</button><button type="button" data-value="groq">Groq (fast)</button></div><span class="hint" id="trEngineHint">Runs on this computer. Punctuated text.</span></div>
+            <div class="field"><label>Accuracy</label><select id="trModel"><option value="auto">Auto (recommended)</option><option value="base">Fast (base)</option><option value="small">Balanced (small)</option><option value="medium">Accurate (medium)</option><option value="large-v3-turbo">Best (large v3 turbo, GPU)</option></select></div>
+            <div class="divider"></div>
+            <label class="switch"><input type="checkbox" id="trBurn" /><span class="track"></span><span><b>Also make a captioned video</b><small>Burns the captions into a copy of the full video</small></span></label>
+            <div class="field" id="trStyleField" hidden><label>Caption style</label><div class="seg" data-name="tr_style"><button type="button" data-value="bold" class="on"><span class="cap-bold">BOLD <em>WORD</em></span></button><button type="button" data-value="clean">Subtitle</button></div></div>
+            <button class="btn primary lg tool-start" disabled>Transcribe</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ============================================================ TOOL: ENHANCE -->
+    <section data-view="enhance" hidden>
+      <div class="page-head"><div><h1>Enhance video</h1><p>Sharper, cleaner video and balanced audio, tuned with quality measurements so it improves without over-processing. Runs on this computer.</p></div></div>
+      <div class="grid-2">
+        <div class="stack">
+          <div class="card">
+            <div class="launcher-tabs tool-tabs" data-tool="enhance"><button class="on" data-src="youtube">YouTube link</button><button data-src="file">Upload file</button></div>
+            <form class="source-bar tool-url" autocomplete="off">
+              <div class="input-wrap"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
+                <input type="url" placeholder="https://www.youtube.com/watch?v=…" required /></div>
+              <button class="btn primary" type="submit">Load</button>
+            </form>
+            <label class="dropzone tool-drop" hidden style="padding:26px 16px">
+              <input type="file" accept="video/*,audio/*,.mkv,.ts,.flv,.mp3,.wav,.m4a" hidden />
+              <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L7 9m5-5l5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+              <b class="drop-title">Drop a file, or click to browse</b>
+              <div class="bar" hidden><div></div></div>
+            </label>
+            <p class="form-error tool-error" hidden></p>
+          </div>
+          <div class="tool-preview"></div>
+          <div class="card tool-progress" hidden>
+            <div class="progress-top"><span class="stage">Starting…</span><span class="pct">0%</span></div>
+            <div class="bar"><div></div></div>
+            <div class="stat-row" style="margin-top:14px"><div class="stat"><small>Elapsed</small><b class="t-elapsed">–</b></div><div class="stat"><small>Status</small><b class="t-status">Queued</b></div><div class="stat"><small>Job</small><b class="t-job mono" style="font-size:12px">–</b></div></div>
+            <p class="tool-dl muted small" hidden style="margin:12px 0 0"></p>
+            <div class="note bad tool-failed" hidden style="margin-top:12px"></div>
+          </div>
+          <div class="tool-result" hidden></div>
+        </div>
+        <div class="card options">
+          <div class="card-head"><h3>Enhancement</h3></div>
+          <div class="fields">
+            <div class="field"><label>Output quality</label><div class="seg" data-name="en_target"><button type="button" data-value="1080">1080p</button><button type="button" data-value="1440" class="on">2K</button><button type="button" data-value="2160">4K</button></div><span class="hint" id="enTargetHint"></span></div>
+            <div class="field"><label>Strength</label><div class="seg" data-name="en_strength"><button type="button" data-value="natural">Natural</button><button type="button" data-value="balanced" class="on">Balanced</button><button type="button" data-value="strong">Strong</button></div></div>
+            <label class="switch"><input type="checkbox" id="enColor" checked /><span class="track"></span><span><b>Richer colors</b><small>Gentle vibrance and contrast boost</small></span></label>
+            <label class="switch"><input type="checkbox" id="enAudio" checked /><span class="track"></span><span><b>Balance audio loudness</b><small>Normalizes to −14 LUFS, YouTube's standard level</small></span></label>
+            <div class="field"><label>Only part of the video <span class="hint">optional</span></label><div class="pair"><input type="text" id="enFrom" placeholder="From 0:00" /><input type="text" id="enTo" placeholder="To end" /></div></div>
+            <button class="btn primary lg tool-start" disabled>Enhance video</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ============================================================ TOOL: COPYRIGHT -->
+    <section data-view="copyright" hidden>
+      <div class="page-head"><div><h1>Copyright check</h1><p>Check a YouTube video before you clip it, or your own edited video before you upload it.</p></div></div>
+      <div class="grid-2">
+        <div class="stack">
+          <div class="card">
+            <div class="launcher-tabs" id="crTabs"><button class="on" data-src="youtube">YouTube link</button><button data-src="file">My video file</button></div>
+            <form class="source-bar" id="crForm" autocomplete="off">
+              <div class="input-wrap"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg><input id="crInput" type="url" placeholder="https://www.youtube.com/watch?v=…" required /></div>
+              <button class="btn primary" type="submit" id="crBtn">Check</button>
+            </form>
+            <label class="dropzone" id="crDrop" hidden style="padding:26px 16px">
+              <input type="file" accept="video/*,audio/*,.mkv,.mov,.mp3,.wav,.m4a" hidden />
+              <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L7 9m5-5l5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+              <b class="drop-title">Drop your edited video, or click to browse</b>
+              <div class="bar" hidden><div></div></div>
+            </label>
+            <p class="form-error" id="crError" hidden></p>
+          </div>
+          <div class="card" id="crProgress" hidden>
+            <div class="progress-top"><span class="stage">Starting…</span><span class="pct">0%</span></div>
+            <div class="bar"><div></div></div>
+          </div>
+          <div id="crResult"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>What's checked</h3></div>
+          <div class="kv-list">
+            <div><span>License</span><b>Creative Commons vs standard YouTube license</b></div>
+            <div><span>Music</span><b>Songs YouTube identified in the video</b></div>
+            <div><span>Source</span><b>Official releases, labels, gameplay</b></div>
+            <div><span>Claims</span><b>“No copyright” statements by the uploader</b></div>
+          </div>
+          <div class="card-head" style="margin-top:22px"><h3>Your own video file</h3></div>
+          <div class="kv-list">
+            <div><span>Music</span><b>Finds every part with background music, second by second</b></div>
+            <div><span>Tags</span><b>Artist / album tags left in the file</b></div>
+            <div><span>Privacy</span><b>Runs on this computer, nothing leaves it</b></div>
+          </div>
+          <p class="hint" style="margin:14px 0 0;line-height:1.5">YouTube's Content ID database isn't public, so no tool can guarantee a video is free of copyrighted material. This report shows the evidence so you can decide, and isn't legal advice.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ LIBRARY -->
+    <section data-view="library" hidden>
+      <div class="page-head"><div><h1>Library</h1><p id="libSummary">Every job and the clips it produced.</p></div></div>
+      <div class="toolbar">
+        <div class="seg" id="libFilter"><button class="on" data-f="all">All</button><button data-f="active">In progress</button><button data-f="done">Completed</button><button data-f="failed">Failed</button></div>
+        <div class="spacer"></div>
+        <input type="text" id="libSearch" placeholder="Search titles…" />
+      </div>
+      <div class="card" style="padding:0"><div class="table-wrap"><table class="table" id="libTable"></table></div></div>
+    </section>
+
+    <!-- ============================================================ JOB -->
+    <section data-view="job" hidden>
+      <div class="row" style="margin-bottom:14px"><a class="btn ghost sm" href="#/library"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>Library</a></div>
+      <div class="card job-head">
+        <div class="thumb"><img id="jobThumb" alt="" /></div>
+        <div style="min-width:0"><h1 id="jobTitle"></h1><div class="meta" id="jobMeta"></div></div>
+        <div class="row"><a class="btn sm" id="ytLink" target="_blank" rel="noopener">Open source</a><button class="btn sm danger" id="cancelBtn">Cancel job</button></div>
+      </div>
+      <div class="grid-2" style="margin-top:14px">
+        <div class="stack">
+          <div class="card live-banner" id="watchCard" hidden>
+            <span class="pill live" id="watchPill"><span class="dot"></span>LIVE</span>
+            <div class="info"><b id="watchTitle">Monitoring the stream</b><span class="muted small" id="watchText"></span></div>
+            <button class="btn sm danger" id="stopWatchBtn">Stop monitoring</button>
+          </div>
+          <div class="note bad" id="errorCard" hidden><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h0"/></svg><div><b id="errorTitle">Job failed</b><div id="errorText"></div></div></div>
+          <div class="note warn" id="warnBox" hidden></div>
+          <div class="card" id="progressCard">
+            <div class="progress-top"><span class="stage" id="stageText">Starting…</span><span class="pct" id="pctText">0%</span></div>
+            <div class="bar"><div id="barFill"></div></div>
+            <div class="stat-row" style="margin-top:14px">
+              <div class="stat"><small>Elapsed</small><b id="statElapsed">–</b></div>
+              <div class="stat"><small>Time left (est.)</small><b id="statEta">–</b></div>
+              <div class="stat"><small>Clips ready</small><b id="statClips">0</b></div>
+            </div>
+          </div>
+          <div class="card" id="dlCard" hidden>
+            <div class="card-head"><h3>Downloads</h3><span class="sub" id="dlQuality"></span></div>
+            <div class="stat-row">
+              <div class="stat"><small>Downloaded</small><b id="dlBytes">–</b></div>
+              <div class="stat"><small>Speed now</small><b id="dlSpeed">–</b></div>
+              <div class="stat"><small>Sources ready</small><b id="dlDone">–</b></div>
+            </div>
+            <div class="dl-list" id="dlList"></div>
+          </div>
+          <div id="results" hidden>
+            <div class="card">
+              <div class="card-head"><h3>Moment map</h3><span class="sub" id="signalsUsed"></span></div>
+              <div class="timeline"><canvas id="tlCanvas"></canvas><div id="tlMarks"></div></div>
+              <div class="axis"><span id="tlStart">0:00</span><span id="tlEnd"></span></div>
+            </div>
+            <div class="row" style="margin:20px 0 12px"><h3 id="clipCount" style="font-size:15px"></h3><div class="spacer"></div>
+              <a class="btn sm" id="transcriptBtn">Full transcript</a><a class="btn sm primary" id="zipBtn">Download all</a></div>
+            <div class="clips" id="clipGrid"></div>
+          </div>
+        </div>
+        <div class="stack">
+          <div class="card"><div class="card-head"><h3>Pipeline</h3><span class="sub" id="totalTime"></span></div><div class="tracker" id="tracker"></div></div>
+          <div class="card"><div class="card-head"><h3>Details</h3></div><div class="kv-list" id="jobDetails"></div></div>
+          <div class="card"><div class="card-head"><h3>Activity</h3><a class="btn ghost sm log-link">Download log</a></div>
+            <pre class="log" id="logBox"></pre>
+            <div class="row" style="margin-top:10px"><a class="btn ghost sm" id="diagBtn">Diagnostics bundle</a><div class="spacer"></div><button class="btn ghost sm danger" id="deleteJobBtn">Delete job</button></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ SETTINGS -->
+    <section data-view="settings" hidden>
+      <div class="page-head"><div><h1>Settings</h1><p>Stored on this computer. API keys are only sent to their own provider.</p></div></div>
+      <form class="settings-grid" id="settingsForm" autocomplete="off">
+        <nav class="settings-nav"><a href="#set-ai" data-scroll>AI review</a><a href="#set-keys" data-scroll>API keys</a><a href="#set-tx" data-scroll>Transcription &amp; audio</a><a href="#set-video" data-scroll>Video</a></nav>
+        <div class="stack">
+          <div class="card" id="set-ai">
+            <div class="card-head"><h3>AI review</h3><span class="pill accent" id="setChain"></span></div>
+            <p class="section-desc">One small request per job: the AI reads the candidate transcripts, re-ranks them and writes titles. If it fails, the next provider takes over.</p>
+            <div class="fields">
+              <div class="field"><label>Provider order</label>
+                <select id="setProvider"><option value="auto">Automatic: Gemini → Groq → Claude</option><option value="gemini">Gemini first</option><option value="groq">Groq first</option><option value="claude">Claude first</option><option value="off">Off (rules only)</option></select></div>
+              <div class="pair"><div class="field" style="flex:1"><label>Gemini model</label><input type="text" id="setGeminiModel" /></div>
+                <div class="field" style="flex:1"><label>Gemini backup model</label><input type="text" id="setGeminiFallback" /></div></div>
+              <div class="field"><label>Claude model</label><input type="text" id="setModel" /></div>
+              <label class="switch"><input type="checkbox" id="setWatch" /><span class="track"></span>
+                <span><b>Let Gemini watch the finalists</b><small>Catches visual moments transcripts miss. Uses about 5× more free quota and adds 1–3 minutes.</small></span></label>
+            </div>
+          </div>
+          <div class="card" id="set-keys">
+            <div class="card-head"><h3>API keys</h3></div>
+            <p class="section-desc">One key per line. Key 1 is used first; the next keys take over only when it hits a limit. Leave a box empty to keep the saved keys.</p>
+            <div class="fields">
+              <div class="field"><label>Gemini <span class="hint" id="setGeminiHint"></span></label><textarea id="setGeminiKey" rows="2" spellcheck="false"></textarea></div>
+              <div class="field"><label>Groq <span class="hint" id="setGroqHint"></span></label><textarea id="setGroqKey" rows="2" spellcheck="false"></textarea></div>
+              <div class="field"><label>Anthropic (Claude) <span class="hint" id="setKeyHint"></span></label><input type="password" id="setKey" placeholder="sk-ant-…" /></div>
+            </div>
+          </div>
+          <div class="card" id="set-tx">
+            <div class="card-head"><h3>Transcription &amp; audio</h3></div>
+            <div class="fields">
+              <div class="field"><label>Engine</label><select id="setTranscriber"><option value="local">Local Whisper (best quality, offline)</option><option value="groq">Groq (very fast, no punctuation, uses quota)</option></select></div>
+              <div class="pair">
+                <div class="field" style="flex:1"><label>Local model</label><select id="setWhisper"><option value="base">Base (fastest)</option><option value="small">Small (balanced)</option><option value="medium">Medium (more accurate)</option><option value="large-v3-turbo">Large v3 Turbo (best, GPU)</option></select></div>
+                <div class="field" style="flex:1"><label>Processor</label><select id="setDevice"><option value="auto">Auto (GPU if available)</option><option value="cpu">CPU only</option><option value="cuda">NVIDIA GPU</option></select></div>
+              </div>
+              <label class="switch"><input type="checkbox" id="setMusic" /><span class="track"></span>
+                <span><b>Transcribe tool: remove background music by default</b><small>Used by the separate Transcribe tool only; clip creation never strips music.</small></span></label>
+            </div>
+          </div>
+          <div class="card" id="set-video">
+            <div class="card-head"><h3>Video</h3></div>
+            <div class="field"><label>Source quality for clips</label><select id="setQuality"><option value="2160">Best available, up to 4K (sharpest, bigger downloads)</option><option value="1440">Up to 2K / 1440p (sharper)</option><option value="1080">1080p (standard)</option><option value="720">720p</option><option value="480">480p</option><option value="360">360p (quick tests)</option></select><span class="hint">Clips are 1080p. Downloading 2K or 4K and scaling down gives noticeably sharper clips, because YouTube's 1080p is heavily compressed.</span></div>
+          </div>
+          <div class="savebar"><span class="muted small" id="saveState"></span><button class="btn primary" type="submit">Save settings</button></div>
+        </div>
+      </form>
+    </section>
+
+    <!-- ============================================================ SYSTEM -->
+    <section data-view="system" hidden>
+      <div class="page-head"><div><h1>System &amp; usage</h1><p>Machine health, API key usage since the app started, and support tools.</p></div>
+        <div class="row"><a class="btn sm" href="/api/diagnostics">Diagnostics bundle</a><button class="btn sm" id="sysRefresh">Refresh</button></div></div>
+      <div class="stack">
+        <div class="card"><div class="card-head"><h3>Overview</h3></div><div class="health" id="sysOverview"></div></div>
+        <div class="card"><div class="card-head"><h3>AI providers &amp; keys</h3><span class="sub" id="sysChain"></span></div><div class="table-wrap"><table class="table" id="keyTable"></table></div></div>
+        <div class="card"><div class="card-head"><h3>Machine</h3></div><div class="health" id="sysMachine"></div></div>
+      </div>
+    </section>
+  </div></main>
+</div>
+
+<!-- ============================================================ shared: preview -->
+<template id="tplPreview">
+  <div class="card preview">
+    <div class="thumb"><img class="pv-thumb" alt="" /><span class="tag"></span><span class="dur"></span></div>
+    <div><h2 class="pv-title"></h2><div class="meta pv-meta"></div><div class="signals pv-signals"></div><div class="note pv-note" style="margin-top:12px" hidden></div></div>
+  </div>
+</template>
+
+<!-- ============================================================ shared: options panel -->
+<div class="card options" id="optionsPanel">
+  <div class="card-head"><h3>Clip settings</h3></div>
+  <div class="fields">
+    <div class="field"><label>Number of clips <output id="countOut">5</output></label><input type="range" id="optCount" min="1" max="15" value="5" /></div>
+    <div class="field"><label>Length (seconds)</label><div class="pair"><input type="number" id="optMin" min="10" max="180" value="30" /><span class="muted">to</span><input type="number" id="optMax" min="15" max="300" value="90" /></div></div>
+    <div class="field"><label>Format</label>
+      <div class="seg" data-name="layout"><button type="button" data-value="vertical_blur" class="on">9:16 fit</button><button type="button" data-value="vertical_crop">9:16 crop</button><button type="button" data-value="original">16:9</button></div></div>
+    <div class="divider"></div>
+    <label class="switch"><input type="checkbox" id="optTranscribe" checked /><span class="track"></span><span><b>Transcribe &amp; caption</b><small>Local speech-to-text (English)</small></span></label>
+    <div class="field needs-tx"><label>Caption style</label>
+      <div class="seg" data-name="caption_style"><button type="button" data-value="bold" class="on"><span class="cap-bold">BOLD <em>WORD</em></span></button><button type="button" data-value="clean">Subtitle</button><button type="button" data-value="none">None</button></div></div>
+    <label class="switch"><input type="checkbox" id="optEnhance" /><span class="track"></span><span><b>Enhance quality</b><small>Sharper, cleaner clips and balanced audio · adds render time</small></span></label>
+    <label class="switch"><input type="checkbox" id="optAI" checked /><span class="track"></span><span><b>AI review</b><small id="aiHint">Re-rank moments and write titles</small></span></label>
+    <div id="watchBox" hidden>
+      <label class="switch"><input type="checkbox" id="optWatch" checked /><span class="track"></span><span><b>Keep monitoring</b><small>Check for new moments until the stream ends</small></span></label>
+      <div class="pair" style="margin-top:10px"><select id="optWatchEvery"><option value="5">every 5 min</option><option value="10" selected>every 10 min</option><option value="15">every 15 min</option><option value="30">every 30 min</option></select>
+        <select id="optWatchClips"><option value="1">1 clip / check</option><option value="2" selected>2 clips / check</option><option value="3">3 clips / check</option><option value="5">5 clips / check</option></select></div>
+    </div>
+    <details class="adv"><summary>Advanced</summary>
+      <div class="fields">
+        <label class="switch needs-tx"><input type="checkbox" id="optFull" /><span class="track"></span><span><b>Full transcript</b><small>Transcribe the whole video (slower)</small></span></label>
+        <div class="field"><label>Analyse only part of the video</label><div class="pair"><input type="text" id="optFrom" placeholder="From 0:00" /><input type="text" id="optTo" placeholder="To end / now" /></div></div>
+      </div>
+    </details>
+    <button class="btn primary lg" id="startBtn" disabled>Find moments</button>
+  </div>
+</div>
+
+<!-- ============================================================ clip editor -->
+<dialog id="editorDlg" class="editor">
+  <div class="dlg-head"><h3>Edit clip</h3><button class="btn ghost icon" id="edClose" aria-label="Close">✕</button></div>
+  <div class="editor-body">
+    <div class="ed-player"><video id="edVideo" playsinline preload="auto"></video></div>
+    <div class="ed-side">
+      <div class="field"><label>Title</label><input type="text" id="edTitle" maxlength="200" /></div>
+      <div class="field"><label>Format</label><div class="seg" data-name="ed_layout"><button type="button" data-value="vertical_blur">9:16 fit</button><button type="button" data-value="vertical_crop">9:16 crop</button><button type="button" data-value="original">16:9</button></div></div>
+      <div class="field" id="edCapField"><label>Captions</label><div class="seg" data-name="ed_caption_style"><button type="button" data-value="bold">Bold</button><button type="button" data-value="clean">Subtitle</button><button type="button" data-value="none">None</button></div></div>
+      <div class="ed-times"><div><small>Start</small><b id="edStart"></b></div><div><small>End</small><b id="edEnd"></b></div><div><small>Length</small><b id="edLen"></b></div></div>
+    </div>
+  </div>
+  <div class="trim">
+    <div class="trim-track" id="trimTrack"><div class="trim-sel" id="trimSel"></div><div class="trim-handle" id="hStart" data-h="start"></div><div class="trim-handle" id="hEnd" data-h="end"></div><div class="trim-head" id="trimHead"></div></div>
+    <div class="axis"><span id="trimMin"></span><span>Drag the handles · click to seek</span><span id="trimMax"></span></div>
+  </div>
+  <div class="editor-actions">
+    <div class="row"><button class="btn" id="edPlay">Play selection</button><button class="btn ghost" id="edSetStart">Set start here</button><button class="btn ghost" id="edSetEnd">Set end here</button></div>
+    <button class="btn primary" id="edSave">Save &amp; re-render</button>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status"></div>
+<script src="app.js" type="module"></script>
+</body>
+</html>
